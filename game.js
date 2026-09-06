@@ -1359,12 +1359,12 @@ function setupTouchUI() {
     font-family: inherit;
   `;
 
-  // === Джойстик (левый нижний угол) ===
+  // === Джойстик (левый нижний угол, компактный) ===
   const stick = document.createElement('div');
   stick.id = 'joystick';
   stick.style.cssText = `
-    position: absolute; left: 30px; bottom: 30px;
-    width: 140px; height: 140px; border-radius: 50%;
+    position: absolute; left: 18px; bottom: 18px;
+    width: 104px; height: 104px; border-radius: 50%;
     background: rgba(255,255,255,0.10);
     border: 2px solid rgba(110,231,183,0.5);
     pointer-events: auto; touch-action: none;
@@ -1374,29 +1374,29 @@ function setupTouchUI() {
   stickKnob.style.cssText = `
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%,-50%);
-    width: 60px; height: 60px; border-radius: 50%;
+    width: 44px; height: 44px; border-radius: 50%;
     background: rgba(110,231,183,0.7);
     border: 2px solid rgba(255,255,255,0.9);
-    box-shadow: 0 0 12px rgba(110,231,183,0.6);
+    box-shadow: 0 0 10px rgba(110,231,183,0.6);
     transition: transform 0.05s linear;
   `;
   stick.appendChild(stickKnob);
   touch.appendChild(stick);
 
   // === Кнопка БЕГ (жёлтая) ===
-  const btnRun = makeTouchButton('runBtn', '🏃\nБЕГ', 'left: 185px; bottom: 50px;', '#fbbf24');
+  const btnRun = makeTouchButton('runBtn', '🏃\nБЕГ', 'left: 130px; bottom: 24px;', '#fbbf24');
   touch.appendChild(btnRun);
 
   // === Кнопка ЛЕЧИТЬ (зелёная) ===
-  const btnTreat = makeTouchButton('treatTouchBtn', '💊\nЛЕЧИТЬ', 'right: 30px; bottom: 165px;', '#16a34a');
+  const btnTreat = makeTouchButton('treatTouchBtn', '💊\nЛЕЧИТЬ', 'right: 18px; bottom: 118px;', '#16a34a');
   touch.appendChild(btnTreat);
 
   // === Кнопка ОТКЛОНИТЬ (красная) ===
-  const btnReject = makeTouchButton('rejectTouchBtn', '✖\nОТКЛОНИТЬ', 'right: 30px; bottom: 50px;', '#ef4444');
+  const btnReject = makeTouchButton('rejectTouchBtn', '✖\nОТКЛОНИТЬ', 'right: 18px; bottom: 24px;', '#ef4444');
   touch.appendChild(btnReject);
 
   // === Кнопка ВЗАИМОДЕЙСТВИЕ (бирюзовая) ===
-  const btnInteract = makeTouchButton('interactTouchBtn', '👆\nДЕЙСТВИЕ', 'right: 150px; bottom: 50px;', '#6ee7b7');
+  const btnInteract = makeTouchButton('interactTouchBtn', '👆\nДЕЙСТВИЕ', 'right: 110px; bottom: 24px;', '#6ee7b7');
   touch.appendChild(btnInteract);
 
   root.appendChild(touch);
@@ -1411,7 +1411,7 @@ function setupTouchUI() {
     const r = stick.getBoundingClientRect();
     return r.top + r.height / 2;
   };
-  const maxR = 55;
+  const maxR = 38;
 
   const onStickStart = (e) => {
     e.preventDefault();
@@ -1464,12 +1464,12 @@ function setupTouchUI() {
     configurable: true
   });
 
-  // === ПРАВЫЙ СТИК ДЛЯ ОБЗОРА (как в мобильных шутерах) ===
+  // === ПРАВЫЙ СТИК ДЛЯ ОБЗОРА (компактный) ===
   const lookStick = document.createElement('div');
   lookStick.id = 'lookStick';
   lookStick.style.cssText = `
-    position: absolute; right: 30px; top: 50%; transform: translateY(-50%);
-    width: 120px; height: 120px; border-radius: 50%;
+    position: absolute; right: 18px; top: 44%; transform: translateY(-50%);
+    width: 92px; height: 92px; border-radius: 50%;
     background: rgba(255,255,255,0.06);
     border: 2px solid rgba(100,150,200,0.4);
     pointer-events: auto; touch-action: none; z-index: 51;
@@ -1478,7 +1478,7 @@ function setupTouchUI() {
   lookKnob.style.cssText = `
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%,-50%);
-    width: 50px; height: 50px; border-radius: 50%;
+    width: 38px; height: 38px; border-radius: 50%;
     background: rgba(100,150,200,0.6);
     border: 2px solid rgba(255,255,255,0.7);
     transition: transform 0.05s linear;
@@ -1489,7 +1489,7 @@ function setupTouchUI() {
   game.lookJoystick = { x: 0, y: 0, active: false };
   const lookCx = () => { const r = lookStick.getBoundingClientRect(); return r.left + r.width / 2; };
   const lookCy = () => { const r = lookStick.getBoundingClientRect(); return r.top + r.height / 2; };
-  const lookMaxR = 45;
+  const lookMaxR = 32;
   const onLookStart = (e) => { e.preventDefault(); e.stopPropagation(); game.lookJoystick.active = true; onLookMove(e); };
   const onLookMove = (e) => {
     if (!game.lookJoystick.active) return;
@@ -1515,9 +1515,9 @@ function setupTouchUI() {
   document.addEventListener('pointerup', onLookEnd);
   document.addEventListener('pointercancel', onLookEnd);
 
-  // === DRAG-ОБЗОР ИЗ ЛЮБОЙ ТОЧКИ ЭКРАНА (ИНВЕРТИРОВАН по вертикали) ===
+  // === DRAG-ОБЗОР ИЗ ЛЮБОЙ ТОЧКИ ЭКРАНА (стандарт: палец вверх = взгляд вверх) ===
   // Свайп в любом свободном месте вращает камеру:
-  //   влево/вправо — поворот, вверх — камера смотрит ВНИЗ, вниз — ВВЕРХ (инверсия)
+  //   влево/вправо — поворот, вверх — взгляд вверх, вниз — взгляд вниз (стандарт)
   let dragLookId = null;
   let dragLastX = 0, dragLastY = 0;
   document.addEventListener('pointerdown', (e) => {
@@ -1538,7 +1538,7 @@ function setupTouchUI() {
     dragLastY = e.clientY;
     const sens = 0.004;
     game.camera.rotation.y -= dx * sens;
-    game.camera.rotation.x += dy * sens; // ИНВЕРСИЯ: палец вверх → камера вниз
+    game.camera.rotation.x -= dy * sens; // СТАНДАРТ: палец вверх → взгляд вверх
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   });
   document.addEventListener('pointerup', (e) => {
@@ -1554,13 +1554,13 @@ function makeTouchButton(id, label, position, color) {
   btn.id = id;
   btn.style.cssText = `
     position: absolute; ${position}
-    width: 110px; height: 100px; border-radius: 18px;
-    background: ${color}55; color: #fff; font-size: 14px; font-weight: 800;
-    border: 3px solid ${color}; cursor: pointer; pointer-events: auto;
+    width: 82px; height: 72px; border-radius: 14px;
+    background: ${color}55; color: #fff; font-size: 11px; font-weight: 800;
+    border: 2px solid ${color}; cursor: pointer; pointer-events: auto;
     touch-action: none; user-select: none; -webkit-user-select: none;
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
     display: flex; align-items: center; justify-content: center;
-    white-space: pre-line; line-height: 1.15; text-align: center;
+    white-space: pre-line; line-height: 1.1; text-align: center;
     transition: transform 0.08s ease, background 0.15s ease;
     font-family: inherit;
     z-index: 51;
@@ -2005,7 +2005,7 @@ function update() {
   if (game.lookJoystick && game.camera && (game.lookJoystick.active || game.lookJoystick.x || game.lookJoystick.y)) {
     const sens = 2.2; // рад/сек при полном отклонении
     game.camera.rotation.y -= game.lookJoystick.x * sens * dt;
-    game.camera.rotation.x += game.lookJoystick.y * sens * dt; // инверсия Y
+    game.camera.rotation.x -= game.lookJoystick.y * sens * dt; // стик вверх → взгляд вверх
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   }
 

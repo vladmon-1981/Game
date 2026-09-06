@@ -202,6 +202,29 @@
   .pcb-treat-btn:hover { background: #166534; transform: translateY(-2px); }
   .pcb-reject { background: #7f1d1d; border-color: #ef4444; color: #fee2e2; }
   .pcb-reject:hover { background: #991b1b; transform: translateY(-2px); }
+
+  /* === МОБИЛЬНАЯ ВЕРСИЯ: компактная карточка + мелкий HUD, чтобы всё влезало с кнопками === */
+  @media (pointer: coarse), (max-width: 900px) {
+    .patient-card-big {
+      width: 280px; max-width: 62vw;
+      top: 58px; bottom: auto;
+      padding: 8px 10px;
+      border-width: 1px; border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(110,231,183,0.3);
+    }
+    @keyframes pcbAppear { 0% { transform: translateX(-50%) translateY(10px); opacity: 0; } 100% { transform: translateX(-50%) translateY(0); opacity: 1; } }
+    .pcb-header { margin-bottom: 3px; }
+    .pcb-name { font-size: 14px; }
+    .pcb-dist { font-size: 10px; padding: 2px 6px; }
+    .pcb-condition { font-size: 10px; margin-bottom: 2px; }
+    .pcb-symptom { padding: 5px 7px; font-size: 10px; margin: 4px 0; }
+    .pcb-treat { padding: 5px 7px; font-size: 11px; margin: 4px 0; border-width: 1px; }
+    .pcb-treat b { font-size: 12px; }
+    .pcb-buttons { margin-top: 5px; gap: 6px; }
+    .pcb-btn { padding: 7px 4px; font-size: 10px; letter-spacing: 0.5px; border-width: 1px; border-radius: 6px; }
+    .hud-top { transform: scale(0.8); transform-origin: top center; }
+    .hints, .log { display: none; }
+  }
   .patient-card .symptom {
     background: rgba(239,68,68,0.1);
     border: 1px solid rgba(239,68,68,0.3);
