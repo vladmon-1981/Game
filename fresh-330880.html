@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Animal Hospital 3D</title>
+<style>
+  :root {
+    --bg-0: #050709;
+    --bg-1: #0c1018;
+    --bg-2: #141a26;
+    --bg-3: #1f2937;
+    --line: #2a3548;
+    --text: #e8edf5;
+    --muted: #8a96aa;
+    --accent: #6ee7b7;
+    --warn: #fbbf24;
+    --bad: #ef4444;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: var(--bg-0);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #root { width: 100vw; height: 100vh; display: block; position: relative; }
+  canvas { display: block; }
+
+  .hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+  .hud > * { pointer-events: auto; }
+
+  .hud-top {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    background: linear-gradient(180deg, rgba(8,11,17,0.92) 0%, rgba(8,11,17,0) 100%);
+  }
+  .hud-logo {
+    font-weight: 900; letter-spacing: 2px;
+    font-size: 14px;
+    color: var(--accent);
+    text-shadow: 0 0 12px rgba(110,231,183,0.4);
+    text-transform: uppercase;
+    margin-right: 8px;
+  }
+  .hud-logo span { color: var(--muted); font-weight: 600; margin-left: 6px; font-size: 10px; letter-spacing: 1px; }
+  .hud-pill {
+    background: rgba(20,26,38,0.85);
+    border: 1px solid var(--line);
+    padding: 5px 11px; border-radius: 8px;
+    font-size: 11px; color: var(--text);
+    display: inline-flex; align-items: center; gap: 6px;
+    font-weight: 600;
+    backdrop-filter: blur(8px);
+  }
+  .hud-pill b { color: var(--accent); font-weight: 800; }
+  .hud-pill.warn { border-color: #5a3e15; color: #fcd34d; background: rgba(42,31,16,0.85); }
+  .hud-pill.warn b { color: #fcd34d; }
+  .hud-pill.bad { border-color: #5a1f1f; color: #fca5a5; background: rgba(42,16,16,0.85); }
+  .hud-pill.bad b { color: #fca5a5; }
+  .hud-pill.blue { border-color: #1e3a5f; color: #93c5fd; background: rgba(14,28,44,0.85); }
+  .hud-pill.blue b { color: #93c5fd; }
+  .hud-bar { height: 5px; background: rgba(20,26,38,0.85); border-radius: 999px; overflow: hidden; width: 110px; border: 1px solid var(--line); }
+  .hud-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #34d399, #6ee7b7); transition: width .4s ease; }
+  .hud-bar.sanity > span { background: linear-gradient(90deg, #60a5fa, #34d399, #fbbf24, #ef4444); }
+  .hud-grow { flex: 1; }
+  .hud-row { display: flex; align-items: center; gap: 8px; }
+  .hud-btn {
+    background: rgba(20,26,38,0.85);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    padding: 5px 10px; border-radius: 6px;
+    cursor: pointer; font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all .15s ease;
+    font-family: inherit;
+    backdrop-filter: blur(8px);
+  }
+  .hud-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .hud-btn.primary { color: #86efac; border-color: #16a34a; }
+  .hud-btn.primary:hover { background: #16a34a; color: #fff; }
+  .hud-btn.danger { color: #fca5a5; border-color: #b91c1c; }
+  .hud-btn.danger:hover { background: #b91c1c; color: #fff; }
+
+  .crosshair {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 24px; height: 24px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .crosshair::before, .crosshair::after {
+    content: ""; position: absolute;
+    background: rgba(255,255,255,0.6);
+  }
+  .crosshair::before { top: 50%; left: 0; right: 0; height: 2px; transform: translateY(-50%); }
+  .crosshair::after { top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); }
+  .crosshair-ring {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 24px; height: 24px;
+    border: 1.5px solid rgba(255,255,255,0.4);
+    border-radius: 50%;
+  }
+
+  .compass {
+    position: absolute; z-index: 6;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 0 0 6px rgba(0,0,0,0.9);
+  }
+  .comp-arrow { font-size: 24px; font-weight: 900; line-height: 1; }
+  .comp-arrow-a { opacity: 0.6; }
+  .comp-arrow-b { opacity: 1; }
+  .comp-dist { font-size: 11px; font-weight: 800; margin-top: 2px; }
+  .comp-label { font-size: 10px; font-weight: 700; margin-top: 1px; opacity: 0.9; }
+
+  .interact {
+    position: absolute; bottom: 35%; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20,26,38,0.9);
+    border: 1px solid var(--accent);
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 1px;
+    box-shadow: 0 0 20px rgba(110,231,183,0.3);
+    backdrop-filter: blur(8px);
+    z-index: 8;
+    text-transform: uppercase;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .interact .key { color: var(--text); background: var(--bg-2); padding: 2px 8px; border-radius: 4px; margin-right: 8px; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(110,231,183,0.3); }
+    50% { box-shadow: 0 0 35px rgba(110,231,183,0.6); }
+  }
+
+  .patient-card {
+    position: absolute; bottom: 20px; left: 20px;
+    width: 360px;
+    background: linear-gradient(180deg, rgba(14,19,28,0.95) 0%, rgba(10,15,23,0.95) 100%);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    z-index: 7;
+  }
+  .patient-card h3 {
+    margin: 0 0 4px;
+    color: var(--accent);
+    font-size: 16px;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .patient-card .spec { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; }
+  .patient-card .desc { font-size: 12px; color: var(--text); margin: 8px 0; line-height: 1.5; }
+  .patient-card .symptom {
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.3);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #fca5a5;
+    margin: 8px 0;
+  }
+  .patient-card .symptom b { color: #fff; }
+  .patient-card .features {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+    font-size: 10px; color: var(--muted);
+    margin: 6px 0;
+  }
+  .patient-card .features b { color: var(--text); }
+  .patient-card .row { display: flex; gap: 6px; margin-top: 10px; }
+  .patient-card .row button { flex: 1; padding: 10px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; border: 1px solid; cursor: pointer; transition: all .15s ease; font-family: inherit; }
+  .patient-card .row .b-treat { background: #14532d; border-color: #16a34a; color: #d1fae5; }
+  .patient-card .row .b-treat:hover { background: #166534; }
+  .patient-card .row .b-reject { background: #7f1d1d; border-color: #ef4444; color: #fee2e2; }
+  .patient-card .row .b-reject:hover { background: #991b1b; }
+  .patient-card .row .b-scan { background: #1e3a8a; border-color: #60a5fa; color: #dbeafe; }
+  .patient-card .row .b-scan:hover { background: #1e40af; }
+
+  .log {
+    position: absolute; bottom: 20px; right: 20px;
+    width: 320px;
+    max-height: 200px;
+    background: rgba(14,19,28,0.85);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 12px;
+    overflow-y: auto;
+    backdrop-filter: blur(8px);
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    z-index: 7;
+  }
+  .log h4 { margin: 0 0 6px; color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; }
+  .log .ok { color: #86efac; } .log .bad { color: #fca5a5; } .log .warn { color: #fcd34d; } .log .info { color: #93c5fd; } .log .psy { color: #c4b5fd; } .log .kill { color: #f87171; font-weight: 800; }
+  .log-entry { padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,0.05); }
+  .log-entry .ts { opacity: 0.5; margin-right: 6px; }
+
+  .modal { position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+  .modal .card { background: linear-gradient(180deg, #131a26 0%, #0a0f17 100%); border: 1px solid var(--line); border-radius: 14px; padding: 24px; max-width: 540px; width: 100%; box-shadow: 0 30px 80px rgba(0,0,0,0.8); max-height: 90vh; overflow: auto; }
+  .modal h2 { margin: 0 0 10px; color: var(--accent); font-size: 22px; letter-spacing: 1px; }
+  .modal h2.bad { color: var(--bad); }
+  .modal p { color: var(--muted); line-height: 1.6; font-size: 13px; }
+  .modal ol { color: var(--muted); line-height: 1.8; font-size: 12px; }
+  .modal-btn { background: #14532d; border: 1px solid #16a34a; color: #d1fae5; padding: 12px 20px; border-radius: 8px; font-weight: 800; letter-spacing: 1px; cursor: pointer; font-size: 13px; text-transform: uppercase; transition: all .15s ease; font-family: inherit; width: 100%; margin-top: 12px; }
+  .modal-btn:hover { background: #166534; transform: translateY(-2px); }
+  .modal-btn.danger { background: #7f1d1d; border-color: #ef4444; color: #fee2e2; }
+  .modal-btn.danger:hover { background: #991b1b; }
+
+  .mg-treat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .mg-treat { background: var(--bg-2); border: 2px solid var(--line); border-radius: 8px; padding: 12px; cursor: pointer; text-align: left; transition: all .15s ease; font-family: inherit; color: var(--text); }
+  .mg-treat:hover { background: var(--bg-3); border-color: var(--accent); transform: translateY(-2px); }
+  .mg-treat .l { font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .mg-treat .d { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+  .lock-container { display: flex; gap: 12px; justify-content: center; margin: 20px 0; }
+  .lock-dial { width: 80px; height: 100px; background: linear-gradient(180deg, #1f2937 0%, #0c1118 100%); border: 2px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 32px; font-weight: 900; color: var(--accent); font-family: ui-monospace, monospace; }
+  .lock-dial .label { font-size: 9px; color: var(--muted); letter-spacing: 1.5px; margin-top: 4px; font-weight: 600; }
+  .lock-instructions { text-align: center; color: var(--muted); font-size: 12px; margin: 12px 0; }
+  .lock-hint { color: var(--accent); font-weight: 800; font-size: 14px; }
+  .lock-keys { display: flex; gap: 6px; justify-content: center; margin-top: 8px; font-size: 10px; color: var(--muted); }
+  .lock-keys kbd { background: var(--bg-2); border: 1px solid var(--line); padding: 3px 7px; border-radius: 4px; font-family: ui-monospace, monospace; }
+
+  .power-grid { display: grid; grid-template-columns: repeat(3, 60px); gap: 6px; margin: 16px auto; justify-content: center; }
+  .power-cell { width: 60px; height: 60px; background: var(--bg-2); border: 2px solid var(--line); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 22px; transition: all .2s ease; }
+  .power-cell.on { background: #fbbf24; border-color: #f59e0b; box-shadow: 0 0 15px rgba(251,191,36,0.5); }
+  .power-cell:hover:not(.on) { background: var(--bg-3); }
+
+  .reflex-zone { width: 100%; height: 220px; background: #000; border: 2px solid var(--line); border-radius: 8px; position: relative; overflow: hidden; margin: 16px 0; cursor: crosshair; }
+  .reflex-target { position: absolute; width: 40px; height: 40px; background: radial-gradient(circle, #ef4444 0%, #7f1d1d 100%); border: 2px solid #fff; border-radius: 50%; cursor: pointer; box-shadow: 0 0 20px rgba(239,68,68,0.7); animation: tgtPulse 0.5s ease-in-out infinite alternate; }
+  @keyframes tgtPulse { from { transform: scale(1); } to { transform: scale(0.85); } }
+  .reflex-stats { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 6px 0; }
+  .reflex-stats b { color: var(--accent); }
+
+  .toast { position: absolute; top: 80px; right: 20px; background: rgba(20,26,38,0.95); border: 2px solid var(--line); padding: 10px 16px; border-radius: 8px; font-size: 12px; z-index: 60; animation: pop .3s ease; box-shadow: 0 8px 24px rgba(0,0,0,0.6); font-weight: 700; letter-spacing: 0.5px; max-width: 300px; backdrop-filter: blur(10px); }
+  .toast.ok { border-color: #16a34a; color: #86efac; background: rgba(20,38,30,0.95); }
+  .toast.bad { border-color: #b91c1c; color: #fca5a5; background: rgba(38,16,16,0.95); }
+  .toast.warn { border-color: #b45309; color: #fcd34d; background: rgba(38,31,16,0.95); }
+  .toast.info { border-color: #1e3a5f; color: #93c5fd; background: rgba(14,28,44,0.95); }
+  @keyframes pop { 0% { transform: translateX(20px); opacity: 0; } 100% { transform: translateX(0); opacity: 1; } }
+
+  .loading { position: absolute; inset: 0; background: var(--bg-0); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 100; }
+  .loading .title { font-size: 22px; font-weight: 900; letter-spacing: 4px; color: var(--accent); text-shadow: 0 0 20px rgba(110,231,183,0.5); }
+  .loading .sub { color: var(--muted); font-size: 12px; letter-spacing: 2px; }
+  .loading .bar { width: 240px; height: 4px; background: var(--bg-2); border-radius: 999px; overflow: hidden; }
+  .loading .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s ease; }
+
+  .shop-fab { position: absolute; top: 60px; right: 20px; background: rgba(20,26,38,0.9); border: 1px solid var(--accent); color: var(--accent); padding: 10px 14px; border-radius: 8px; font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; z-index: 6; backdrop-filter: blur(8px); }
+  .shop-fab:hover { background: var(--accent); color: var(--bg-0); }
+
+  .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .shop-item { background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .shop-item h4 { margin: 0; font-size: 12px; color: var(--text); text-transform: uppercase; letter-spacing: 0.5px; }
+  .shop-item p { margin: 4px 0 8px; font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .shop-item .cost { font-size: 11px; font-weight: 800; color: var(--warn); margin-bottom: 6px; }
+  .shop-buy { background: var(--bg-3); border: 1px solid var(--line); color: var(--text); padding: 6px; border-radius: 6px; cursor: pointer; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; width: 100%; font-family: inherit; transition: all .15s ease; }
+  .shop-buy:hover:not(:disabled) { background: #14532d; border-color: #16a34a; }
+  .shop-buy:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .damage-flash { position: absolute; inset: 0; background: radial-gradient(circle, transparent 30%, rgba(239,68,68,0.4) 100%); pointer-events: none; z-index: 4; animation: damageFade 0.6s ease-out forwards; }
+  @keyframes damageFade { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+  .anomaly-screen { position: absolute; inset: 0; pointer-events: none; z-index: 4; box-shadow: inset 0 0 200px rgba(239,68,68,0.4); animation: anomalyPulse 1.5s ease-in-out infinite; }
+  @keyframes anomalyPulse { 0%, 100% { box-shadow: inset 0 0 150px rgba(239,68,68,0.3); } 50% { box-shadow: inset 0 0 250px rgba(239,68,68,0.7); } }
+
+  .scanlines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0 1px, transparent 1px 3px); pointer-events: none; z-index: 3; opacity: 0.4; }
+
+  .hints { position: absolute; bottom: 240px; left: 50%; transform: translateX(-50%); background: rgba(20,26,38,0.85); border: 1px solid var(--line); padding: 10px 16px; border-radius: 8px; font-size: 11px; color: var(--muted); z-index: 6; backdrop-filter: blur(8px); text-align: center; letter-spacing: 0.5px; }
+  .hints kbd { background: var(--bg-2); border: 1px solid var(--line); padding: 2px 6px; border-radius: 3px; color: var(--text); font-family: ui-monospace, monospace; margin: 0 2px; }
+
+  .mood-toast { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 7; pointer-events: none; }
+  .mood-toast > div { background: rgba(20,26,38,0.95); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font-size: 10px; color: var(--muted); margin-top: 4px; text-align: center; }
+
+  @media (max-width: 768px) {
+    .hud-top { padding: 8px; flex-wrap: wrap; gap: 4px; }
+    .hud-pill { font-size: 9px; padding: 3px 6px; }
+    .patient-card { width: calc(100vw - 40px); bottom: 10px; left: 10px; padding: 10px; }
+    .log { width: calc(100vw - 40px); right: 20px; left: 20px; bottom: 10px; max-height: 120px; }
+    .hints { font-size: 9px; bottom: 200px; }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="loading" id="loading">
+    <div class="title">ANIMAL HOSPITAL</div>
+    <div class="sub">3D · Ночная смена</div>
+    <div class="bar"><div id="loadBar"></div></div>
+    <div class="sub" id="loadStatus" style="font-size:10px;">Инициализация...</div>
+    <pre id="loadLog" style="color:#86efac;font-size:9px;text-align:left;max-width:600px;max-height:200px;overflow:auto;background:rgba(0,0,0,0.4);padding:8px;border-radius:6px;margin-top:12px;display:none;"></pre>
+    <div id="loadError" style="color:#fca5a5;font-size:10px;max-width:500px;text-align:center;margin-top:10px;display:none;word-wrap:break-word;"></div>
+  </div>
+
+<script>
+  // Глобальный логгер загрузки (до всех скриптов)
+  window._log = function(msg) {
+    const el = document.getElementById('loadLog');
+    if (el) {
+      el.style.display = 'block';
+      el.textContent += new Date().toLocaleTimeString() + ' ' + msg + '\n';
+    }
+    console.log('[AH]', msg);
+  };
+  window._logErr = function(msg) {
+    const el = document.getElementById('loadLog');
+    if (el) {
+      el.style.display = 'block';
+      el.textContent += '❌ ' + msg + '\n';
+    }
+    const errEl = document.getElementById('loadError');
+    if (errEl) {
+      errEl.style.display = 'block';
+      errEl.textContent = msg;
+    }
+    console.error('[AH]', msg);
+  };
+  window.addEventListener('error', (e) => {
+    window._logErr('Error: ' + e.message + ' @ ' + e.filename + ':' + e.lineno);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    window._logErr('Promise rejection: ' + (e.reason && e.reason.message || e.reason));
+  });
+  window._log('Скрипт загружен, ожидаем модули...');
+</script>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+
+<script type="module">
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX_FRESH_LOAD_-5027606
+// ============================================================
+// ANIMAL HOSPITAL 3D — Минимальная рабочая версия
+// VERIFIED_FRESH_LOAD_v4
+// ============================================================
+
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+console.log('[AH] Модуль загружен');
+
+// ============================================================
+// AUDIO
+// ============================================================
+const Audio = {
+  ctx: null,
+  enabled: true,
+  init() {
+    if (this.ctx) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new Ctx();
+      console.log('[AH] Audio context создан');
+    } catch (e) {
+      console.log('[AH] Audio init failed:', e);
+      this.ctx = null;
+    }
+  },
+  resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+  tone(freq, dur, type, vol) {
+    if (!this.ctx || !this.enabled) return;
+    type = type || 'sine';
+    vol = vol || 0.3;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(g);
+    g.connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  },
+  click() { this.tone(800, 0.05, 'square', 0.05); },
+  footstep() { this.tone(100, 0.05, 'triangle', 0.05); }
+};
+
+// ============================================================
+// DATA
+// ============================================================
+const ANIMAL_POOL = [
+  { id: 'bunny', name: 'Зайчик', color: 0xf5b8c0, earColor: 0xf5b8c0 },
+  { id: 'puppy', name: 'Щенок', color: 0xc89968, earColor: 0x8b6239 },
+  { id: 'kitten', name: 'Котёнок', color: 0xf5b942, earColor: 0xd49620 },
+  { id: 'bear', name: 'Медвежонок', color: 0x7a4a25, earColor: 0x5d3720 },
+  { id: 'fox', name: 'Лисёнок', color: 0xe87330, earColor: 0xa8481e },
+  { id: 'panda', name: 'Панда', color: 0xfafafa, earColor: 0x1a1a1a }
+];
+
+const CONDITIONS = [
+  { id: 'cold', label: 'Простуда', symptom: 'Чихание', treat: 'Тёплое одеяло' },
+  { id: 'broken', label: 'Перелом', symptom: 'Хромота', treat: 'Гипс' },
+  { id: 'infection', label: 'Инфекция', symptom: 'Покраснение', treat: 'Антибиотики' },
+  { id: 'fleas', label: 'Блохи', symptom: 'Чешется', treat: 'Шампунь' },
+  { id: 'eye', label: 'Глазная инфекция', symptom: 'Мутный глаз', treat: 'Глазные капли' }
+];
+
+const TREATMENTS = ['Тёплое одеяло', 'Антибиотики', 'Гипс', 'Глазные капли', 'Шампунь', 'Витамины', 'Капельница', 'Сироп от кашля'];
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function rand(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
+
+function makePatient() {
+  const base = pick(ANIMAL_POOL);
+  const condition = pick(CONDITIONS);
+  return {
+    id: 'p-' + Math.random().toString(36).slice(2, 9),
+    base,
+    condition,
+    isAnomaly: Math.random() < 0.2,
+    name: base.name,
+    state: 'waiting'
+  };
+}
+
+// ============================================================
+// 3D ANIMAL MODEL
+// ============================================================
+function makeAnimalModel(base) {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: base.color, roughness: 0.6 });
+  const earMat = new THREE.MeshStandardMaterial({ color: base.earColor, roughness: 0.6 });
+
+  // Body
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), bodyMat);
+  body.scale.set(1, 0.85, 0.95);
+  body.position.y = 0.5;
+  body.castShadow = true;
+  group.add(body);
+
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12), bodyMat);
+  head.position.set(0, 0.75, 0.45);
+  group.add(head);
+  group.userData.head = head;
+
+  // Ears
+  const earGeo = new THREE.ConeGeometry(0.1, 0.3, 4);
+  const lEar = new THREE.Mesh(earGeo, earMat);
+  lEar.position.set(-0.2, 0.4, 0);
+  lEar.rotation.z = -0.1;
+  head.add(lEar);
+  const rEar = new THREE.Mesh(earGeo, earMat);
+  rEar.position.set(0.2, 0.4, 0);
+  rEar.rotation.z = 0.1;
+  head.add(rEar);
+
+  // Eyes
+  const eyeGeo = new THREE.SphereGeometry(0.06, 8, 8);
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+  const lE = new THREE.Mesh(eyeGeo, eyeMat); lE.position.set(-0.13, 0.1, 0.35); head.add(lE);
+  const rE = new THREE.Mesh(eyeGeo, eyeMat); rE.position.set(0.13, 0.1, 0.35); head.add(rE);
+
+  // Legs
+  const legGeo = new THREE.CapsuleGeometry(0.07, 0.2, 4, 6);
+  const legPositions = [[-0.25, 0.1, 0.25], [0.25, 0.1, 0.25], [-0.25, 0.1, -0.25], [0.25, 0.1, -0.25]];
+  legPositions.forEach(p => {
+    const leg = new THREE.Mesh(legGeo, bodyMat);
+    leg.position.set(p[0], p[1], p[2]);
+    group.add(leg);
+  });
+
+  // Tail
+  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), bodyMat);
+  tail.position.set(0, 0.5, -0.45);
+  tail.scale.set(0.7, 0.7, 1.3);
+  group.add(tail);
+  group.userData.tail = tail;
+
+  return group;
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+const game = {
+  scene: null,
+  camera: null,
+  renderer: null,
+  controls: null,
+  clock: null,
+  patients: [],
+  selectedPatient: null,
+  keys: {},
+  moveSpeed: 5,
+  playerHeight: 1.6,
+  bobTime: 0,
+  animTime: 0,
+  shift: 1,
+  shiftTarget: 5,
+  shiftProgress: 0,
+  coins: 50,
+  sanity: 100,
+  deaths: 0,
+  hasScanner: false,
+  audioOn: true,
+  modal: null,
+  showShiftIntro: true,
+  // raycasting
+  raycaster: new THREE.Raycaster()
+};
+
+// ============================================================
+// LOG
+// ============================================================
+function addLog(type, text) {
+  console.log('[' + type + ']', text);
+  const logDiv = document.getElementById('logEntries');
+  if (logDiv) {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + type;
+    entry.textContent = '[' + new Date().toLocaleTimeString('ru-RU', { hour12: false }) + '] ' + text;
+    logDiv.prepend(entry);
+    while (logDiv.children.length > 12) logDiv.removeChild(logDiv.lastChild);
+  }
+}
+
+function showToast(msg, kind) {
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + (kind || 'info');
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2000);
+}
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+function initThree() {
+  console.log('[AH] initThree() старт');
+  const root = document.getElementById('root');
+  root.innerHTML = '';
+
+  // Scene
+  game.scene = new THREE.Scene();
+  game.scene.background = new THREE.Color(0x0a0f17);
+  game.scene.fog = new THREE.Fog(0x0a0f17, 5, 30);
+
+  // Camera
+  game.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+  game.camera.position.set(0, 1.6, 18);
+
+  // Renderer
+  game.renderer = new THREE.WebGLRenderer({ antialias: true });
+  game.renderer.setSize(window.innerWidth, window.innerHeight);
+  game.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  root.appendChild(game.renderer.domElement);
+
+  // Lighting
+  const ambient = new THREE.AmbientLight(0x6080a0, 0.6);
+  game.scene.add(ambient);
+
+  const dir = new THREE.DirectionalLight(0xfff5d6, 0.5);
+  dir.position.set(5, 15, 5);
+  game.scene.add(dir);
+
+  // Point lights (4 ceiling)
+  const positions = [[-5, 3.5, -5], [5, 3.5, -5], [-5, 3.5, 5], [5, 3.5, 5]];
+  positions.forEach(p => {
+    const light = new THREE.PointLight(0xfff5d6, 0.6, 15, 1.5);
+    light.position.set(p[0], p[1], p[2]);
+    game.scene.add(light);
+  });
+
+  // Floor
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a2030, roughness: 0.7 });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  game.scene.add(floor);
+
+  // Walls
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x0e131c, roughness: 0.9 });
+  const walls = [
+    { pos: [0, 2, -20], size: [40, 4, 0.2] },
+    { pos: [0, 2, 20], size: [40, 4, 0.2] },
+    { pos: [-20, 2, 0], size: [0.2, 4, 40] },
+    { pos: [20, 2, 0], size: [0.2, 4, 40] }
+  ];
+  walls.forEach(w => {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w.size[0], w.size[1], w.size[2]), wallMat);
+    wall.position.set(w.pos[0], w.pos[1], w.pos[2]);
+    game.scene.add(wall);
+  });
+
+  // Ceiling
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x050709 }));
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.y = 4;
+  game.scene.add(ceil);
+
+  // Reception desk
+  const desk = new THREE.Group();
+  const deskTop = new THREE.Mesh(
+    new THREE.BoxGeometry(3, 0.1, 1),
+    new THREE.MeshStandardMaterial({ color: 0x5a3e15, roughness: 0.5 })
+  );
+  deskTop.position.y = 1;
+  desk.add(deskTop);
+  desk.position.set(0, 0, -10);
+  game.scene.add(desk);
+
+  // Exam tables (4 rooms)
+  const roomPositions = [[-8, 0, -5], [8, 0, -5], [-8, 0, 5], [8, 0, 5]];
+  roomPositions.forEach((p, i) => {
+    const table = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 0.2, 0.8),
+      new THREE.MeshStandardMaterial({ color: 0xe8edf5 })
+    );
+    table.position.set(p[0], 0.8, p[2]);
+    table.userData.spawnPoint = true;
+    table.userData.spawnIdx = i;
+    game.scene.add(table);
+  });
+
+  // Controls
+  game.controls = new PointerLockControls(game.camera, game.renderer.domElement);
+  game.clock = new THREE.Clock();
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    game.camera.aspect = window.innerWidth / window.innerHeight;
+    game.camera.updateProjectionMatrix();
+    game.renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  console.log('[AH] initThree() завершён');
+}
+
+// ============================================================
+// INPUT
+// ============================================================
+function setupInput() {
+  console.log('[AH] setupInput() старт');
+  document.addEventListener('keydown', (e) => {
+    game.keys[e.code] = true;
+    if (e.code === 'KeyE') tryInteract();
+    if (e.code === 'KeyF') { if (game.selectedPatient) treatPatient(); }
+    if (e.code === 'KeyR') { if (game.selectedPatient) rejectPatient(); }
+    if (e.code === 'KeyQ') {
+      // Выбрать ближайшего пациента
+      selectNearestPatient();
+    }
+    if (e.code === 'Escape') {
+      if (game.controls.isLocked) game.controls.unlock();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    game.keys[e.code] = false;
+  });
+  document.addEventListener('mousedown', () => {
+    if (!game.controls.isLocked && !game.modal && !game.showShiftIntro) {
+      game.controls.lock();
+    }
+  });
+  game.controls.addEventListener('lock', () => {
+    Audio.init();
+    Audio.resume();
+    game.showShiftIntro = false;
+    renderHud();
+    console.log('[AH] Pointer locked');
+  });
+  game.controls.addEventListener('unlock', () => {
+    console.log('[AH] Pointer unlocked');
+  });
+  console.log('[AH] setupInput() завершён');
+}
+
+function selectNearestPatient() {
+  if (!game.camera) return;
+  let nearest = null, minDist = 8;
+  const camPos = game.camera.position;
+  game.patients.forEach(p => {
+    if (!p.mesh) return;
+    const d = p.mesh.position.distanceTo(camPos);
+    if (d < minDist) { minDist = d; nearest = p; }
+  });
+  if (nearest) {
+    selectPatient(nearest);
+    showToast('Выбран: ' + nearest.name + ' (' + minDist.toFixed(1) + ' ед.)', 'info');
+  } else {
+    showToast('Нет пациентов рядом', 'warn');
+  }
+}
+
+// ============================================================
+// INTERACT
+// ============================================================
+function tryInteract() {
+  if (!game.controls.isLocked) {
+    game.controls.lock();
+    return;
+  }
+  // 1. Попробуем raycast (прицел на пациенте)
+  const forward = new THREE.Vector3();
+  game.camera.getWorldDirection(forward);
+  const origin = game.camera.position.clone();
+  game.raycaster.set(origin, forward);
+  game.raycaster.far = 8;
+
+  const patientMeshes = game.patients.map(p => p.mesh).filter(Boolean);
+  const intersects = game.raycaster.intersectObjects(patientMeshes, true);
+  if (intersects.length > 0) {
+    let obj = intersects[0].object;
+    while (obj && !obj.userData.patient) obj = obj.parent;
+    if (obj && obj.userData.patient) {
+      const p = game.patients.find(x => x.id === obj.userData.patient.id);
+      if (p) {
+        selectPatient(p);
+        showToast('Выбран: ' + p.name, 'ok');
+        return;
+      }
+    }
+  }
+
+  // 2. Fallback: ближайший пациент в радиусе 6
+  let nearest = null, minDist = 6;
+  const camPos = game.camera.position;
+  game.patients.forEach(p => {
+    if (!p.mesh) return;
+    const d = p.mesh.position.distanceTo(camPos);
+    if (d < minDist) { minDist = d; nearest = p; }
+  });
+  if (nearest) {
+    selectPatient(nearest);
+    showToast('Выбран: ' + nearest.name + ' (рядом, ' + minDist.toFixed(1) + ' ед.)', 'ok');
+  } else {
+    showToast('Подойди ближе к пациенту', 'warn');
+  }
+}
+
+function selectPatient(p) {
+  Audio.click();
+  game.selectedPatient = p;
+  addLog('info', 'Выбран: ' + p.name);
+  renderHud();
+}
+
+function treatPatient() {
+  if (!game.selectedPatient) return;
+  const p = game.selectedPatient;
+  if (p.isAnomaly) {
+    addLog('bad', '⚠ АНОМАЛИЯ! ' + p.name + ' — это была ловушка!');
+    showToast('Аномалия! Пациент исчез...', 'bad');
+    p.mesh.material.color.setHex(0xdc2626);
+    setTimeout(() => removePatient(p), 1000);
+  } else {
+    Audio.tone(880, 0.15, 'sine', 0.2);
+    Audio.tone(1100, 0.2, 'sine', 0.2);
+    game.coins += 15;
+    addLog('ok', 'Вылечен: ' + p.name + '. +15 монет.');
+    showToast('+15 монет!', 'ok');
+    removePatient(p);
+  }
+}
+
+function rejectPatient() {
+  if (!game.selectedPatient) return;
+  const p = game.selectedPatient;
+  if (p.isAnomaly) {
+    Audio.tone(1200, 0.1, 'sine', 0.2);
+    game.coins += 20;
+    addLog('ok', 'Отклонена аномалия: ' + p.name + '. +20 монет.');
+    showToast('Верно! Аномалия отклонена. +20', 'ok');
+  } else {
+    Audio.tone(200, 0.2, 'square', 0.2);
+    addLog('bad', 'Ошибка! ' + p.name + ' был настоящим пациентом.');
+    showToast('Это был настоящий!', 'bad');
+  }
+  removePatient(p);
+}
+
+function removePatient(p) {
+  if (p.mesh) game.scene.remove(p.mesh);
+  if (p.marker) game.scene.remove(p.marker);
+  game.patients = game.patients.filter(x => x.id !== p.id);
+  if (game.selectedPatient && game.selectedPatient.id === p.id) game.selectedPatient = null;
+  game.shiftProgress++;
+  if (game.shiftProgress >= game.shiftTarget) {
+    addLog('ok', '=== СМЕНА ' + game.shift + ' ЗАВЕРШЕНА! ===');
+    showToast('Смена завершена!', 'ok');
+    game.shift++;
+    game.shiftTarget += 2;
+    game.shiftProgress = 0;
+  } else {
+    setTimeout(() => spawnPatient(), 500);
+  }
+  renderHud();
+}
+
+function spawnPatient() {
+  if (game.patients.length >= 3) return;
+  const p = makePatient();
+  const model = makeAnimalModel(p.base);
+  // Спавн перед игроком (или случайно в одной из 4 комнат)
+  let rx, rz;
+  if (game.camera) {
+    // Пациент в 3-4 единицах перед игроком, чуть сбоку
+    const forward = new THREE.Vector3();
+    game.camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    const side = new THREE.Vector3(-forward.z, 0, forward.x);
+    const dist = 3 + Math.random() * 1.5;
+    const sideDist = (Math.random() - 0.5) * 2;
+    rx = game.camera.position.x + forward.x * dist + side.x * sideDist;
+    rz = game.camera.position.z + forward.z * dist + side.z * sideDist;
+    // Clamp to bounds
+    rx = Math.max(-18, Math.min(18, rx));
+    rz = Math.max(-18, Math.min(18, rz));
+  } else {
+    rx = (Math.random() - 0.5) * 10;
+    rz = (Math.random() - 0.5) * 10;
+  }
+  model.position.set(rx, 0, rz);
+  model.userData.patient = p;
+  game.scene.add(model);
+
+  // Маркер над пациентом (светящаяся стрелка вниз)
+  const markerGroup = new THREE.Group();
+  // Стрелка вниз
+  const arrow = new THREE.Mesh(
+    new THREE.ConeGeometry(0.25, 0.6, 4),
+    new THREE.MeshBasicMaterial({ color: p.isAnomaly ? 0xef4444 : 0x6ee7b7 })
+  );
+  arrow.rotation.x = Math.PI; // смотрит вниз
+  arrow.position.y = 2.2;
+  markerGroup.add(arrow);
+  // Кольцо под стрелкой
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.3, 0.4, 16),
+    new THREE.MeshBasicMaterial({ color: p.isAnomaly ? 0xef4444 : 0x6ee7b7, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
+  );
+  ring.position.y = 0.05;
+  ring.rotation.x = -Math.PI / 2;
+  markerGroup.add(ring);
+  // Имя пациента
+  const labelCanvas = document.createElement('canvas');
+  labelCanvas.width = 256; labelCanvas.height = 64;
+  const lctx = labelCanvas.getContext('2d');
+  lctx.fillStyle = 'rgba(0,0,0,0.6)';
+  lctx.fillRect(0, 0, 256, 64);
+  lctx.fillStyle = p.isAnomaly ? '#fca5a5' : '#6ee7b7';
+  lctx.font = 'bold 32px sans-serif';
+  lctx.textAlign = 'center';
+  lctx.fillText(p.name + (p.isAnomaly ? ' ⚠' : ''), 128, 42);
+  const labelTex = new THREE.CanvasTexture(labelCanvas);
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true }));
+  label.position.y = 1.7;
+  label.scale.set(1.5, 0.4, 1);
+  markerGroup.add(label);
+  markerGroup.position.set(rx, 0, rz);
+  markerGroup.userData.isMarker = true;
+  game.scene.add(markerGroup);
+
+  game.patients.push({ ...p, mesh: model, marker: markerGroup, animPhase: Math.random() * 10 });
+  addLog('info', 'Новый пациент: ' + p.name + (p.isAnomaly ? ' [⚠ АНОМАЛИЯ]' : '') + ' (' + (model.position.distanceTo(game.camera ? game.camera.position : new THREE.Vector3())).toFixed(1) + ' ед.)');
+  renderHud();
+}
+
+// ============================================================
+// HUD
+// ============================================================
+function renderHud() {
+  const hud = document.getElementById('hud');
+  if (!hud) return;
+
+  let html = '';
+
+  // Top bar
+  html += '<div class="hud-top">';
+  html += '<div class="hud-logo">🏥 ANIMAL HOSPITAL <span>3D</span></div>';
+  html += '<div class="hud-pill blue">Смена <b>' + game.shift + '</b></div>';
+  html += '<div class="hud-pill">📋 <b>' + game.shiftProgress + '/' + game.shiftTarget + '</b></div>';
+  html += '<div class="hud-pill">💰 <b>' + game.coins + '</b></div>';
+  html += '<div class="hud-pill warn">☕ <b>' + game.sanity + '</b>%</div>';
+  html += '<div class="hud-pill ' + (game.deaths > 0 ? 'bad' : '') + '">☠ <b>' + game.deaths + '</b>/3</div>';
+  html += '</div>';
+
+  // Crosshair
+  html += '<div class="crosshair"><div class="crosshair-ring"></div></div>';
+
+  // Компас/направление к ближайшему пациенту
+  if (game.camera && game.patients.length > 0) {
+    let nearest = null, minDist = Infinity;
+    const camPos = game.camera.position;
+    game.patients.forEach(p => {
+      if (!p.mesh) return;
+      const d = p.mesh.position.distanceTo(camPos);
+      if (d < minDist) { minDist = d; nearest = p; }
+    });
+    if (nearest && minDist > 4) {
+      // Показываем направление как стрелку на краю экрана
+      const dir = new THREE.Vector3().subVectors(nearest.mesh.position, camPos);
+      const angle = Math.atan2(dir.x, dir.z) - game.camera.rotation.y;
+      // Нормализуем угол к [-PI, PI]
+      let a = angle;
+      while (a > Math.PI) a -= Math.PI * 2;
+      while (a < -Math.PI) a += Math.PI * 2;
+      // Стрелка: поворот и сдвиг к краю экрана
+      const edgeOffset = 110;
+      const rad = a; // уже поворот
+      const x = Math.sin(rad) * edgeOffset;
+      const y = -Math.cos(rad) * edgeOffset;
+      const color = nearest.isAnomaly ? '#fca5a5' : '#6ee7b7';
+      const animClass = Math.sin(Date.now() / 300) > 0 ? 'comp-arrow-a' : 'comp-arrow-b';
+      html += '<div id="compass" class="compass" style="left:calc(50% + ' + x + 'px); top:calc(50% + ' + y + 'px); color:' + color + ';">' +
+        '<div class="comp-arrow ' + animClass + '" style="transform:rotate(' + (a * 180 / Math.PI) + 'deg);">▼</div>' +
+        '<div class="comp-dist">' + minDist.toFixed(1) + 'м</div>' +
+        '<div class="comp-label">' + (nearest.isAnomaly ? '⚠ ' : '') + nearest.name + '</div>' +
+        '</div>';
+    }
+  }
+
+  // Toasts will be added dynamically
+
+  // Selected patient
+  if (game.selectedPatient && !game.showShiftIntro) {
+    const p = game.selectedPatient;
+    html += '<div class="patient-card">';
+    html += '<h3>' + p.name + '</h3>';
+    html += '<div class="spec">' + p.condition.label + '</div>';
+    html += '<div class="symptom">⚠ ' + p.condition.symptom + '</div>';
+    html += '<div class="row">';
+    html += '<button class="b-treat" id="treatBtn">💊 Лечить</button>';
+    html += '<button class="b-reject" id="rejectBtn">✖ Отклонить</button>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  // Log
+  html += '<div class="log">';
+  html += '<h4>Журнал</h4>';
+  html += '<div id="logEntries"></div>';
+  html += '</div>';
+
+  // Interact prompt
+  if (game.controls && game.controls.isLocked) {
+    html += '<div class="interact"><span class="key">E</span>Взаимодействовать</div>';
+  }
+
+  // Hints
+  if (!game.controls || !game.controls.isLocked) {
+    if (!game.showShiftIntro) {
+      html += '<div class="hints">Кликни в окно, чтобы захватить курсор. <kbd>S</kbd> вперёд, <kbd>W</kbd> назад, <kbd>Мышь</kbd> обзор, <kbd>E</kbd> взаимодействие</div>';
+    }
+  }
+
+  hud.innerHTML = html;
+
+  // Attach button handlers
+  const treatBtn = document.getElementById('treatBtn');
+  if (treatBtn) treatBtn.onclick = treatPatient;
+  const rejectBtn = document.getElementById('rejectBtn');
+  if (rejectBtn) rejectBtn.onclick = rejectPatient;
+}
+
+// ============================================================
+// SHIFT INTRO
+// ============================================================
+function showShiftIntro() {
+  game.modal = 'shiftIntro';
+  const div = document.createElement('div');
+  div.className = 'modal';
+  div.id = 'shiftIntro';
+  div.innerHTML = '<div class="card">' +
+    '<h2>🏥 Animal Hospital 3D</h2>' +
+    '<p>Добро пожаловать на <b>ночную смену</b>!</p>' +
+    '<h3 style="color:var(--accent);font-size:14px;margin-top:14px;">Управление:</h3>' +
+    '<ul style="color:var(--muted);line-height:1.8;font-size:12px;list-style:none;padding:0;text-align:left;">' +
+    '<li>• <b>WASD</b> — движение (S=вперёд, W=назад)</li>' +
+    '<li>• <b>Мышь</b> — обзор на 360°</li>' +
+    '<li>• <b>Shift</b> — бег</li>' +
+    '<li>• <b>E</b> — взаимодействие с пациентом</li>' +
+    '<li>• Подойдите к пациенту и нажмите E, затем выберите Лечить или Отклонить</li>' +
+    '</ul>' +
+    '<h3 style="color:var(--accent);font-size:14px;margin-top:14px;">Цель:</h3>' +
+    '<p>Пройдите 6 смен. Лечите настоящих пациентов, отклоняйте аномалии.</p>' +
+    '<p style="color:var(--warn);font-weight:700;">⚠ Аномалии нельзя лечить — они атакуют!</p>' +
+    '<button class="modal-btn" id="beginBtn">Начать смену 1 →</button>' +
+    '</div>';
+  document.getElementById('root').appendChild(div);
+  document.getElementById('beginBtn').onclick = () => {
+    Audio.click();
+    game.showShiftIntro = false;
+    game.modal = null;
+    document.getElementById('shiftIntro').remove();
+    game.controls.lock();
+    spawnPatient();
+    renderHud();
+  };
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+function update() {
+  const dt = Math.min(game.clock.getDelta(), 0.1);
+  game.animTime += dt;
+
+  // Movement (ИНВЕРТИРОВАНО: W=назад, S=вперёд)
+  if (game.controls && game.controls.isLocked && !game.modal && !game.showShiftIntro) {
+    const forward = (game.keys['KeyS'] ? 1 : 0) - (game.keys['KeyW'] ? 1 : 0);
+    const strafe = (game.keys['KeyD'] ? 1 : 0) - (game.keys['KeyA'] ? 1 : 0);
+    const speedMult = (game.keys['ShiftLeft'] || game.keys['ShiftRight']) ? 1.8 : 1;
+    if (forward !== 0 || strafe !== 0) {
+      const v = new THREE.Vector3(strafe, 0, -forward).normalize().multiplyScalar(game.moveSpeed * speedMult * dt);
+      game.controls.moveRight(v.x);
+      game.controls.moveForward(v.z);
+      game.bobTime += dt * (speedMult === 1.8 ? 12 : 8);
+      if (Math.random() < 0.04) Audio.footstep();
+    }
+    // Head bob
+    const bobY = Math.sin(game.bobTime) * 0.04;
+    game.camera.position.y = game.playerHeight + bobY;
+  }
+
+  // Animate patients
+  game.patients.forEach(p => {
+    if (!p.mesh) return;
+    p.animPhase = (p.animPhase || 0) + dt;
+    p.mesh.position.y = Math.sin(p.animPhase * 2) * 0.05;
+    if (p.mesh.userData.tail) {
+      p.mesh.userData.tail.rotation.y = Math.sin(p.animPhase * 5) * 0.5;
+    }
+    if (p.mesh.userData.head) {
+      p.mesh.userData.head.rotation.y = Math.sin(p.animPhase * 0.5) * 0.3;
+    }
+    // Пульсация маркера над пациентом
+    if (p.marker) {
+      const pulse = 1 + Math.sin(p.animPhase * 3) * 0.15;
+      p.marker.children.forEach(c => {
+        if (c.geometry && c.geometry.type === 'ConeGeometry') {
+          c.scale.set(pulse, pulse, pulse);
+        }
+        if (c.material && c.material.opacity !== undefined && c.geometry && c.geometry.type === 'RingGeometry') {
+          c.material.opacity = 0.4 + Math.sin(p.animPhase * 3) * 0.3;
+        }
+      });
+    }
+  });
+
+  // Auto-spawn
+  if (game.controls && game.controls.isLocked && game.patients.length < 2) {
+    if (Math.random() < 0.005) spawnPatient();
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  update();
+  if (game.renderer) game.renderer.render(game.scene, game.camera);
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+window.addEventListener('error', (e) => {
+  console.error('[AH] Global error:', e.message, '@', e.filename, ':', e.lineno);
+  const out = document.createElement('pre');
+  out.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;background:#400;color:#fca;padding:20px;z-index:9999;white-space:pre-wrap;font-size:12px;';
+  out.textContent = 'ERROR: ' + e.message + '\n@ ' + e.filename + ':' + e.lineno + '\n' + (e.error && e.error.stack || '');
+  document.body.appendChild(out);
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[AH] Promise rejection:', e.reason);
+  const out = document.createElement('pre');
+  out.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;background:#400;color:#fca;padding:20px;z-index:9999;white-space:pre-wrap;font-size:12px;';
+  out.textContent = 'PROMISE REJECTION: ' + (e.reason && e.reason.message || e.reason);
+  document.body.appendChild(out);
+});
+
+try {
+  console.log('[AH] Boot старт');
+  initThree();
+  setupInput();
+  renderHud();
+  showShiftIntro();
+  animate();
+  addLog('ok', 'Система готова. Кликни "Начать смену 1"');
+  console.log('[AH] Boot завершён');
+} catch (e) {
+  console.error('[AH] Boot exception:', e);
+  const out = document.createElement('pre');
+  out.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;background:#400;color:#fca;padding:20px;z-index:9999;white-space:pre-wrap;font-size:12px;';
+  out.textContent = 'BOOT FAILED: ' + e.message + '\n' + e.stack;
+  document.body.appendChild(out);
+}
+
+</script>
+</body>
+</html>

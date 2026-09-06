@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>Animal Hospital · Диагностика</title>
+<style>
+  body { background: #050709; color: #e8edf5; font-family: ui-monospace, monospace; padding: 20px; line-height: 1.6; }
+  .ok { color: #6ee7b7; }
+  .bad { color: #fca5a5; font-weight: bold; }
+  .info { color: #60a5fa; }
+  pre { background: #141a26; padding: 10px; border-radius: 6px; overflow: auto; }
+  .step { padding: 8px; margin: 4px 0; border-left: 3px solid #2a3548; padding-left: 12px; }
+  .step.ok { border-color: #16a34a; }
+  .step.bad { border-color: #ef4444; background: rgba(239,68,68,0.1); }
+  h1 { color: #6ee7b7; }
+  h2 { color: #60a5fa; margin-top: 20px; }
+  .btn { background: #14532d; border: 1px solid #16a34a; color: #d1fae5; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; margin: 4px; }
+  .btn:hover { background: #166534; }
+</style>
+</head>
+<body>
+<h1>🏥 Animal Hospital · Диагностика загрузки</h1>
+<div id="out">Запуск тестов...</div>
+
+<script>
+const out = document.getElementById('out');
+const log = (msg, cls = '') => {
+  const d = document.createElement('div');
+  d.className = 'step ' + cls;
+  d.innerHTML = msg;
+  out.appendChild(d);
+};
+const logPre = (obj) => {
+  const d = document.createElement('pre');
+  d.textContent = JSON.stringify(obj, null, 2);
+  out.appendChild(d);
+};
+
+async function test() {
+  out.innerHTML = '';
+  log('<h2>1. Информация о браузере</h2>');
+  log(`User Agent: <span class="info">${navigator.userAgent}</span>`);
+  log(`Online: <span class="${navigator.onLine ? 'ok' : 'bad'}">${navigator.onLine}</span>`);
+  log(`Cookies: <span class="${navigator.cookieEnabled ? 'ok' : 'bad'}">${navigator.cookieEnabled}</span>`);
+
+  log('<h2>2. Проверка поддержки WebGL</h2>');
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (gl) {
+      log(`✅ WebGL поддерживается: <span class="ok">${gl.getParameter(gl.VERSION)}</span>`, 'ok');
+      log(`Renderer: <span class="info">${gl.getParameter(gl.RENDERER)}</span>`);
+      log(`Vendor: <span class="info">${gl.getParameter(gl.VENDOR)}</span>`);
+    } else {
+      log('❌ WebGL НЕ поддерживается', 'bad');
+    }
+  } catch (e) {
+    log('❌ Ошибка WebGL: ' + e.message, 'bad');
+  }
+
+  log('<h2>3. Проверка поддержки ES модулей и importmap</h2>');
+  log(`Dynamic import: <span class="${typeof window.dynamicImport !== 'undefined' ? 'ok' : 'info'}">доступен</span>`);
+  try {
+    const mod = await import('data:text/javascript,export default 42');
+    log('✅ Динамические импорты работают', 'ok');
+  } catch (e) {
+    log('❌ Динамические импорты: ' + e.message, 'bad');
+  }
+
+  log('<h2>4. Загрузка Three.js (локальный)</h2>');
+  try {
+    const t0 = performance.now();
+    const THREE = await import('./vendor/three/three.module.js');
+    const t1 = performance.now();
+    log(`✅ Three.js загружен за <span class="ok">${(t1-t0).toFixed(0)}ms</span>`, 'ok');
+    log(`REVISION: <span class="info">${THREE.REVISION}</span>`);
+    log(`Scene: <span class="info">${typeof THREE.Scene}</span>`);
+    log(`Mesh: <span class="info">${typeof THREE.Mesh}</span>`);
+    log(`SphereGeometry: <span class="info">${typeof THREE.SphereGeometry}</span>`);
+  } catch (e) {
+    log('❌ Ошибка загрузки Three.js: ' + e.message, 'bad');
+    log('Возможные причины:');
+    log('- Файл vendor/three/three.module.js не найден');
+    log('- Сервер не запущен (нужен http://, не file://)');
+    log('- CORS блокировка');
+  }
+
+  log('<h2>5. Загрузка PointerLockControls</h2>');
+  try {
+    const ctrl = await import('./vendor/three/addons/controls/PointerLockControls.js');
+    const t1 = performance.now();
+    log(`✅ PointerLockControls загружен`, 'ok');
+    log(`PointerLockControls: <span class="info">${typeof ctrl.PointerLockControls}</span>`);
+  } catch (e) {
+    log('❌ Ошибка PointerLockControls: ' + e.message, 'bad');
+  }
+
+  log('<h2>6. Проверка сервера и URL</h2>');
+  log(`Current URL: <span class="info">${window.location.href}</span>`);
+  log(`Protocol: <span class="info">${window.location.protocol}</span>`);
+  log(`Host: <span class="info">${window.location.host}</span>`);
+  if (window.location.protocol === 'file:') {
+    log('⚠️ <span class="bad">Открыто через file:// — модули НЕ работают!</span><br>Нужен запуск через http:// (используй python -m http.server)', 'bad');
+  } else {
+    log('✅ Открыто через http:// — модули должны работать', 'ok');
+  }
+
+  log('<h2>7. Тест простой 3D сцены</h2>');
+  try {
+    const THREE = await import('./vendor/three/three.module.js');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
+    const renderer = new THREE.WebGLRenderer();
+    log('✅ 3D объекты создаются', 'ok');
+
+    // Test cube
+    const geo = new THREE.BoxGeometry(1,1,1);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x6ee7b7 });
+    const cube = new THREE.Mesh(geo, mat);
+    log('✅ Меш создан', 'ok');
+
+    scene.add(cube);
+    log('✅ Сцена собрана, рендерим...');
+    renderer.render(scene, camera);
+    log('✅ Рендер прошёл успешно!', 'ok');
+  } catch (e) {
+    log('❌ Ошибка 3D: ' + e.message, 'bad');
+    log('Stack: ' + e.stack, 'bad');
+  }
+
+  log('<h2>✅ Диагностика завершена</h2>');
+  log('Если все шаги зелёные — игра должна работать.');
+  log('Если есть красные — скопируй эту страницу и пришли мне.');
+}
+
+test().catch(e => {
+  log('❌ КРИТИЧЕСКАЯ ОШИБКА: ' + e.message, 'bad');
+  log('Stack: ' + e.stack, 'bad');
+});
+</script>
+</body>
+</html>

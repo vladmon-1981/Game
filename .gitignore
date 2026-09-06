@@ -1,0 +1,11 @@
+.DS_Store
+*.log
+node_modules/
+.vscode/
+.idea/
+*.swp
+Packages/
+ZharPtitsa/
+birdhot-new/
+floating-whale/
+nemotron/

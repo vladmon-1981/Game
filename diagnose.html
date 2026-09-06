@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>AH Диагностика</title>
+<style>
+body{background:#050709;color:#e8edf5;font-family:ui-monospace,monospace;padding:20px;line-height:1.8}
+.ok{color:#6ee7b7}.bad{color:#fca5a5}.info{color:#60a5fa}
+pre{background:#0c1018;padding:10px;border-radius:6px;overflow:auto;font-size:11px}
+h1{color:#6ee7b7}
+.btn{background:#14532d;border:1px solid #16a34a;color:#d1fae5;padding:12px 20px;border-radius:8px;cursor:pointer;font-size:14px;margin:8px;display:inline-block;text-decoration:none}
+.btn:hover{background:#166534}
+</style>
+</head>
+<body>
+<h1>🏥 Animal Hospital · Полная диагностика</h1>
+<div id="out">Запуск...</div>
+<script>
+const out = document.getElementById("out");
+const log = (m, c) => { const d = document.createElement("div"); d.className = c || ""; d.innerHTML = m; out.appendChild(d); };
+const pre = (m) => { const d = document.createElement("pre"); d.textContent = m; out.appendChild(d); };
+
+async function main() {
+  log("<h2>1. Окружение</h2>");
+  log("URL: <span class=info>" + location.href + "</span>");
+  log("User Agent: <span class=info>" + navigator.userAgent + "</span>");
+  log("");
+
+  log("<h2>2. Проверка что fetch работает</h2>");
+  try {
+    const r = await fetch("/game.js");
+    log("GET /game.js → HTTP " + r.status + " · " + r.headers.get("content-type"), "ok");
+    const t = await r.text();
+    log("Размер: " + t.length + " байт", "ok");
+    log("Первые 100 символов:", "");
+    pre(t.substring(0, 200));
+  } catch(e) {
+    log("❌ fetch failed: " + e.message, "bad");
+  }
+  log("");
+
+  log("<h2>3. Загрузка Three.js напрямую</h2>");
+  try {
+    const t0 = performance.now();
+    const THREE = await import("/vendor/three/three.module.js");
+    log("✅ Three.js загружен: " + THREE.REVISION + " (" + (performance.now()-t0).toFixed(0) + "мс)", "ok");
+  } catch(e) {
+    log("❌ Three.js: " + e.message, "bad");
+  }
+  log("");
+
+  log("<h2>4. Загрузка game.js (внешний файл)</h2>");
+  log("Пробуем загрузить game.js как модуль...", "");
+  try {
+    const t0 = performance.now();
+    const mod = await import("/game.js?v=diag");
+    log("✅ game.js загружен (" + (performance.now()-t0).toFixed(0) + "мс)", "ok");
+  } catch(e) {
+    log("❌ game.js FAILED: " + e.message, "bad");
+    log("Stack:", "");
+    pre(e.stack);
+  }
+  log("");
+
+  log("<h2>5. Решение</h2>");
+  log("Если game.js не загружается — попробуй fresh-330880.html (там inline JS)", "info");
+  log('<a class="btn" href="/fresh-330880.html">→ Открыть fresh-330880.html</a>', "");
+}
+main();
+</script>
+</body>
+</html>
