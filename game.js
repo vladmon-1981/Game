@@ -1277,26 +1277,7 @@ function setupTouchUI() {
   const btnInteract = makeTouchButton('interactTouchBtn', '👆\nДЕЙСТВИЕ', 'right: 150px; bottom: 50px;', '#6ee7b7');
   touch.appendChild(btnInteract);
 
-  // === Подсказка про свайп для обзора ===
-  const hint = document.createElement('div');
-  hint.id = 'touchHint';
-  hint.style.cssText = `
-    position: absolute; top: 14px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.55); color: #fff;
-    padding: 6px 14px; border-radius: 14px;
-    font-size: 12px; pointer-events: none; opacity: 0.85;
-  `;
-  hint.textContent = 'Свайп по экрану — обзор';
-  touch.appendChild(hint);
-
   root.appendChild(touch);
-
-  // Скрыть подсказку через 5 секунд
-  setTimeout(() => {
-    const h = document.getElementById('touchHint');
-    if (h) { h.style.opacity = '0'; h.style.transition = 'opacity 1s'; }
-  }, 5000);
 
   // === Логика джойстика ===
   game.joystick = { x: 0, y: 0, active: false };
@@ -1361,34 +1342,56 @@ function setupTouchUI() {
     configurable: true
   });
 
-  // === Обзор камеры (drag по экрану) ===
-  let lookPointer = null;
-  let lastLX = 0, lastLY = 0;
-  document.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#touchUI button, #joystick')) return;
-    lookPointer = e.pointerId;
-    lastLX = e.clientX;
-    lastLY = e.clientY;
-  });
-  document.addEventListener('pointermove', (e) => {
-    if (lookPointer === null || e.pointerId !== lookPointer) return;
-    const dx = e.clientX - lastLX;
-    const dy = e.clientY - lastLY;
-    lastLX = e.clientX;
-    lastLY = e.clientY;
-    if (game.camera) {
-      const sens = 0.004;
-      game.camera.rotation.y -= dx * sens;
-      game.camera.rotation.x -= dy * sens;
-      game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
-    }
-  });
-  document.addEventListener('pointerup', (e) => {
-    if (e.pointerId === lookPointer) lookPointer = null;
-  });
-  document.addEventListener('pointercancel', (e) => {
-    if (e.pointerId === lookPointer) lookPointer = null;
-  });
+  // === ПРАВЫЙ СТИК ДЛЯ ОБЗОРА (как в мобильных шутерах) ===
+  const lookStick = document.createElement('div');
+  lookStick.id = 'lookStick';
+  lookStick.style.cssText = `
+    position: absolute; right: 30px; top: 50%; transform: translateY(-50%);
+    width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    border: 2px solid rgba(100,150,200,0.4);
+    pointer-events: auto; touch-action: none; z-index: 51;
+  `;
+  const lookKnob = document.createElement('div');
+  lookKnob.style.cssText = `
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    width: 50px; height: 50px; border-radius: 50%;
+    background: rgba(100,150,200,0.6);
+    border: 2px solid rgba(255,255,255,0.7);
+    transition: transform 0.05s linear;
+  `;
+  lookStick.appendChild(lookKnob);
+  touch.appendChild(lookStick);
+
+  game.lookJoystick = { x: 0, y: 0, active: false };
+  const lookCx = () => { const r = lookStick.getBoundingClientRect(); return r.left + r.width / 2; };
+  const lookCy = () => { const r = lookStick.getBoundingClientRect(); return r.top + r.height / 2; };
+  const lookMaxR = 45;
+  const onLookStart = (e) => { e.preventDefault(); e.stopPropagation(); game.lookJoystick.active = true; onLookMove(e); };
+  const onLookMove = (e) => {
+    if (!game.lookJoystick.active) return;
+    e.preventDefault();
+    const pt = e.touches ? e.touches[0] : e;
+    let dx = pt.clientX - lookCx();
+    let dy = pt.clientY - lookCy();
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > lookMaxR) { dx = dx * lookMaxR / dist; dy = dy * lookMaxR / dist; }
+    lookKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    game.lookJoystick.x = dx / lookMaxR;
+    game.lookJoystick.y = dy / lookMaxR;
+  };
+  const onLookEnd = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    game.lookJoystick.active = false;
+    game.lookJoystick.x = 0;
+    game.lookJoystick.y = 0;
+    lookKnob.style.transform = 'translate(-50%,-50%)';
+  };
+  lookStick.addEventListener('pointerdown', onLookStart);
+  document.addEventListener('pointermove', (e) => { if (game.lookJoystick && game.lookJoystick.active) onLookMove(e); });
+  document.addEventListener('pointerup', onLookEnd);
+  document.addEventListener('pointercancel', onLookEnd);
 }
 
 function makeTouchButton(id, label, position, color) {
@@ -1729,12 +1732,7 @@ function renderHud() {
     html += '<div class="interact"><span class="key">E</span>Взаимодействовать</div>';
   }
 
-  // Hints
-  if (!game.controls || !game.controls.isLocked) {
-    if (!game.showShiftIntro) {
-      html += '<div class="hints">Кликни в окно, чтобы захватить курсор. <kbd>W</kbd> вперёд, <kbd>S</kbd> назад, <kbd>Мышь</kbd> обзор</div>';
-    }
-  }
+  // Подсказки в центре экрана убраны по запросу
 
   hud.innerHTML = html;
 
@@ -1876,6 +1874,14 @@ function update() {
     // Head bob
     const bobY = Math.sin(game.bobTime) * 0.04;
     game.camera.position.y = game.playerHeight + bobY;
+  }
+
+  // === ОБЗОР от правого стика (ИНВЕРТИРОВАН по вертикали: стик вверх = смотреть вниз) ===
+  if (game.lookJoystick && game.camera && (game.lookJoystick.active || game.lookJoystick.x || game.lookJoystick.y)) {
+    const sens = 2.2; // рад/сек при полном отклонении
+    game.camera.rotation.y -= game.lookJoystick.x * sens * dt;
+    game.camera.rotation.x += game.lookJoystick.y * sens * dt; // инверсия Y
+    game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   }
 
   // Animate patients
@@ -2062,20 +2068,27 @@ function animate() {
 // ============================================================
 // BOOT
 // ============================================================
+// Компактный показ ошибок: одна плашка сверху, исчезает сама.
+// Никаких больших красных окон на весь экран.
+let _errBox = null;
+function showRuntimeError(title, detail) {
+  console.error('[AH]', title, detail || '');
+  if (_errBox) _errBox.remove();
+  _errBox = document.createElement('div');
+  _errBox.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);' +
+    'background:rgba(60,10,10,0.92);color:#fca5a5;padding:8px 14px;border-radius:10px;' +
+    'z-index:9999;font-size:12px;max-width:90vw;white-space:pre-wrap;pointer-events:none;';
+  _errBox.textContent = title + (detail ? ': ' + detail : '');
+  document.body.appendChild(_errBox);
+  setTimeout(() => { if (_errBox) { _errBox.remove(); _errBox = null; } }, 10000);
+}
+
 window.addEventListener('error', (e) => {
-  console.error('[AH] Global error:', e.message, '@', e.filename, ':', e.lineno);
-  const out = document.createElement('pre');
-  out.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;background:#400;color:#fca;padding:20px;z-index:9999;white-space:pre-wrap;font-size:12px;';
-  out.textContent = 'ERROR: ' + e.message + '\n@ ' + e.filename + ':' + e.lineno + '\n' + (e.error && e.error.stack || '');
-  document.body.appendChild(out);
-});
+  showRuntimeError('Ошибка', (e.message || 'Script error') + ' @' + (e.filename || '?') + ':' + (e.lineno || '?'));
+}, true); // capture — ловит и ошибки в модулях
 
 window.addEventListener('unhandledrejection', (e) => {
-  console.error('[AH] Promise rejection:', e.reason);
-  const out = document.createElement('pre');
-  out.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;background:#400;color:#fca;padding:20px;z-index:9999;white-space:pre-wrap;font-size:12px;';
-  out.textContent = 'PROMISE REJECTION: ' + (e.reason && e.reason.message || e.reason);
-  document.body.appendChild(out);
+  showRuntimeError('Promise', e.reason && e.reason.message || String(e.reason));
 });
 
 try {
@@ -2088,9 +2101,5 @@ try {
   addLog('ok', 'Система готова. Кликни "Начать смену 1"');
   console.log('[AH] Boot завершён');
 } catch (e) {
-  console.error('[AH] Boot exception:', e);
-  const out = document.createElement('pre');
-  out.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;background:#400;color:#fca;padding:20px;z-index:9999;white-space:pre-wrap;font-size:12px;';
-  out.textContent = 'BOOT FAILED: ' + e.message + '\n' + e.stack;
-  document.body.appendChild(out);
+  showRuntimeError('BOOT FAILED', e.message + '\n' + e.stack);
 }
