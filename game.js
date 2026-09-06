@@ -1392,6 +1392,39 @@ function setupTouchUI() {
   document.addEventListener('pointermove', (e) => { if (game.lookJoystick && game.lookJoystick.active) onLookMove(e); });
   document.addEventListener('pointerup', onLookEnd);
   document.addEventListener('pointercancel', onLookEnd);
+
+  // === DRAG-ОБЗОР ИЗ ЛЮБОЙ ТОЧКИ ЭКРАНА (ИНВЕРТИРОВАН по вертикали) ===
+  // Свайп в любом свободном месте вращает камеру:
+  //   влево/вправо — поворот, вверх — камера смотрит ВНИЗ, вниз — ВВЕРХ (инверсия)
+  let dragLookId = null;
+  let dragLastX = 0, dragLastY = 0;
+  document.addEventListener('pointerdown', (e) => {
+    // Игнорируем кнопки, стики и HUD-элементы
+    if (e.target.closest('button, #joystick, #lookStick, #hud, #touchUI button')) return;
+    // На десктопе с pointer lock drag не нужен
+    if (game.hasPointerLock && game.controls && game.controls.isLocked) return;
+    dragLookId = e.pointerId;
+    dragLastX = e.clientX;
+    dragLastY = e.clientY;
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (dragLookId === null || e.pointerId !== dragLookId) return;
+    if (!game.camera) return;
+    const dx = e.clientX - dragLastX;
+    const dy = e.clientY - dragLastY;
+    dragLastX = e.clientX;
+    dragLastY = e.clientY;
+    const sens = 0.004;
+    game.camera.rotation.y -= dx * sens;
+    game.camera.rotation.x += dy * sens; // ИНВЕРСИЯ: палец вверх → камера вниз
+    game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
+  });
+  document.addEventListener('pointerup', (e) => {
+    if (e.pointerId === dragLookId) dragLookId = null;
+  });
+  document.addEventListener('pointercancel', (e) => {
+    if (e.pointerId === dragLookId) dragLookId = null;
+  });
 }
 
 function makeTouchButton(id, label, position, color) {
