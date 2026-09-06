@@ -90,23 +90,12 @@ function makePatient() {
 // ============================================================
 function makeAnimalModel(base, isAnomaly) {
   const group = new THREE.Group();
-  // Аномалия: тело темнее, с красноватым оттенком
-  const bodyColor = isAnomaly ? new THREE.Color(base.color).multiplyScalar(0.55).offsetHSL(0, 0.1, -0.1).getHex() : base.color;
-  const bodyMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6, metalness: 0 });
+  // Аномалии выглядят АБСОЛЮТНО так же, как обычные животные.
+  // Отличие видно ТОЛЬКО на телевизоре с камерами (красная метка).
+  const bodyMat = new THREE.MeshStandardMaterial({ color: base.color, roughness: 0.6, metalness: 0 });
   const earMat = new THREE.MeshStandardMaterial({ color: base.earColor, roughness: 0.6 });
-  // Глаза: у аномалии — красные, светящиеся
-  const eyeMat = new THREE.MeshStandardMaterial({
-    color: isAnomaly ? 0xff6666 : 0xffffff,
-    roughness: 0.3,
-    emissive: isAnomaly ? 0xff2222 : 0x000000,
-    emissiveIntensity: isAnomaly ? 0.8 : 0
-  });
-  const pupilMat = new THREE.MeshStandardMaterial({
-    color: isAnomaly ? 0xff0000 : 0x1a1a1a,
-    roughness: 0.2,
-    emissive: isAnomaly ? 0xff0000 : 0x000000,
-    emissiveIntensity: isAnomaly ? 1.0 : 0
-  });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const pupilMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.2 });
   const noseMat = new THREE.MeshStandardMaterial({ color: base.id === 'pig' ? 0xf9b4be : 0x7c3aed, roughness: 0.4 });
 
   // === ТЕЛО — разная форма для разных животных ===
@@ -347,25 +336,28 @@ function makeAnimalModel(base, isAnomaly) {
     group.userData.tail = tail;
   }
 
-  // === АУРА АНОМАЛИИ: красное пульсирующее свечение вокруг модели ===
+  // === МЕТКА АНОМАЛИИ (видна ТОЛЬКО на телевизоре с камерами) ===
+  // Вживую невидима: пациент выглядит как обычный.
   if (isAnomaly) {
+    if (!game.anomalyAuras) game.anomalyAuras = [];
     const aura = new THREE.Mesh(
-      new THREE.SphereGeometry(0.85, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0xff2222, transparent: true, opacity: 0.18, depthWrite: false })
+      new THREE.SphereGeometry(0.9, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xff2222, transparent: true, opacity: 0.45, depthWrite: false })
     );
     aura.position.y = 0.6;
+    aura.visible = false; // вживую скрыта
     aura.userData.isAnomalyAura = true;
     group.add(aura);
-    // Второй слой ауры — потолще, более прозрачный
+    game.anomalyAuras.push(aura);
     const aura2 = new THREE.Mesh(
-      new THREE.SphereGeometry(1.1, 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.08, depthWrite: false })
+      new THREE.SphereGeometry(1.2, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.3, depthWrite: false })
     );
     aura2.position.y = 0.6;
+    aura2.visible = false;
     aura2.userData.isAnomalyAura = true;
     group.add(aura2);
-    // Сделать хвост/голову чуть крупнее (лёгкая деформация)
-    group.scale.multiplyScalar(1.08);
+    game.anomalyAuras.push(aura2);
   }
   group.userData.isAnomaly = !!isAnomaly;
 
@@ -442,6 +434,8 @@ function initThree() {
   // Camera
   game.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
   game.camera.position.set(0, 1.6, 18);
+  // Логическая позиция игрока (точка на полу) — авторитет для движения и коллизий
+  game.playerPos = new THREE.Vector3(0, 0, 18);
 
   // Renderer
   game.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1115,9 +1109,122 @@ function initThree() {
   game.scene.add(npc);
   game.npc = npc;
 
+  // === ТЕЛЕВИЗОР НАД РЕСЕПШН (камеры наблюдения) ===
+  // Рендер-таргет: изображение с камеры видеонаблюдения
+  game.tvRT = new THREE.WebGLRenderTarget(512, 288);
+  game.tvCam = new THREE.PerspectiveCamera(55, 16 / 9, 0.5, 60);
+  game.tvCam.position.set(16, 3.6, 14);
+  game.tvCam.lookAt(0, 0, 0);
+
+  const tv = new THREE.Group();
+  // Кронштейн к потолку
+  const tvPole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2a, metalness: 0.6, roughness: 0.4 })
+  );
+  tvPole.position.y = 1.25;
+  tv.add(tvPole);
+  // Корпус ТВ
+  const tvFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(3.4, 2.0, 0.14),
+    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.35, metalness: 0.5 })
+  );
+  tvFrame.position.y = 0;
+  tv.add(tvFrame);
+  // Экран (текстура с камеры)
+  const tvScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.15, 1.78),
+    new THREE.MeshBasicMaterial({ map: game.tvRT.texture, color: 0xc8ffd8 })
+  );
+  tvScreen.position.set(0, 0, 0.08);
+  tv.add(tvScreen);
+  // Рамка-безель
+  const tvBezel = new THREE.Mesh(
+    new THREE.BoxGeometry(3.55, 2.15, 0.1),
+    new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.5 })
+  );
+  tvBezel.position.set(0, 0, -0.03);
+  tv.add(tvBezel);
+  // Красный диод записи
+  const tvLed = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff2222 })
+  );
+  tvLed.position.set(1.6, -0.85, 0.08);
+  tv.add(tvLed);
+  // Табличка "ВИДЕОНАБЛЮДЕНИЕ"
+  const tvSignCanvas = document.createElement('canvas');
+  tvSignCanvas.width = 256; tvSignCanvas.height = 64;
+  const tsc = tvSignCanvas.getContext('2d');
+  tsc.fillStyle = '#0c1018';
+  tsc.fillRect(0, 0, 256, 64);
+  tsc.fillStyle = '#f87171';
+  tsc.font = 'bold 26px monospace';
+  tsc.textAlign = 'center';
+  tsc.fillText('● ВИДЕОНАБЛЮДЕНИЕ', 128, 40);
+  const tvSignTex = new THREE.CanvasTexture(tvSignCanvas);
+  const tvSign = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 0.55),
+    new THREE.MeshBasicMaterial({ map: tvSignTex })
+  );
+  tvSign.position.set(0, -1.35, 0.05);
+  tv.add(tvSign);
+
+  tv.position.set(0, 2.7, -11.4); // за стойкой ресепшн, лицом к залу (+z)
+  game.scene.add(tv);
+
+  // === КОТ-ВРАЧ (для вида от третьего лица) ===
+  const cat = new THREE.Group();
+  const catMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0f, roughness: 0.55 });
+  // Тело
+  const catBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.75, 4, 10), catMat);
+  catBody.position.y = 1.05;
+  cat.add(catBody);
+  // Голова
+  const catHead = new THREE.Mesh(new THREE.SphereGeometry(0.27, 14, 12), catMat);
+  catHead.position.y = 1.85;
+  cat.add(catHead);
+  // Уши (треугольные)
+  const earGeo = new THREE.ConeGeometry(0.09, 0.18, 4);
+  const lEar = new THREE.Mesh(earGeo, catMat);
+  lEar.position.set(-0.14, 2.12, 0);
+  lEar.rotation.z = 0.25;
+  cat.add(lEar);
+  const rEar = new THREE.Mesh(earGeo, catMat);
+  rEar.position.set(0.14, 2.12, 0);
+  rEar.rotation.z = -0.25;
+  cat.add(rEar);
+  // ЖЁЛТЫЕ глаза (светящиеся)
+  const catEyeMat = new THREE.MeshStandardMaterial({ color: 0xffd400, emissive: 0xffcc00, emissiveIntensity: 1.2, roughness: 0.2 });
+  const catEyeGeo = new THREE.SphereGeometry(0.055, 10, 8);
+  const catLEye = new THREE.Mesh(catEyeGeo, catEyeMat);
+  catLEye.position.set(-0.1, 1.9, 0.23);
+  cat.add(catLEye);
+  const catREye = new THREE.Mesh(catEyeGeo, catEyeMat);
+  catREye.position.set(0.1, 1.9, 0.23);
+  cat.add(catREye);
+  // Хвост
+  const catTail = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.5, 4, 6), catMat);
+  catTail.position.set(0, 1.15, -0.4);
+  catTail.rotation.x = 0.7;
+  cat.add(catTail);
+  // Халат поверх тела (белая передняя часть)
+  const catCoat = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.8, 0.1),
+    new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.7 })
+  );
+  catCoat.position.set(0, 1.0, 0.26);
+  cat.add(catCoat);
+  cat.visible = false; // показывается только в 3-м лице
+  game.scene.add(cat);
+  game.catMesh = cat;
+  game.thirdPerson = false;
+
   // === СПАВН-ПОИНТ для пациентов (внутри кабинета, НЕ на кушетке) ===
   // Кушетка на z=-0.5, пациент справа от неё на свободном месте
   game.spawnPoints = roomPositions.map(rp => new THREE.Vector3(rp.pos[0] + 1.5, 0, rp.pos[2] - 0.5));
+  // Точки перед дверями кабинетов (для маршрута пациентов через дверь)
+  game.roomDoors = roomPositions.map(rp => new THREE.Vector3(rp.pos[0], 0, rp.pos[2] + 3.6));
 
   // === КОЛЛАЙДЕРЫ для внешних стен и мебели ===
   // (добавляем к коллайдерам кабинетов)
@@ -1179,6 +1286,12 @@ function setupInput() {
       // Выбрать ближайшего пациента
       selectNearestPatient();
     }
+    if (e.code === 'KeyV') {
+      // Переключение вида: 1-е лицо ↔ 3-е лицо (кот-врач)
+      game.thirdPerson = !game.thirdPerson;
+      showToast(game.thirdPerson ? '🐱 Вид от третьего лица' : '👁 Вид от первого лица', 'info');
+      Audio.click();
+    }
     if (e.code === 'Escape') {
       if (game.controls.isLocked) game.controls.unlock();
     }
@@ -1186,10 +1299,19 @@ function setupInput() {
   document.addEventListener('keyup', (e) => {
     game.keys[e.code] = false;
   });
-  document.addEventListener('mousedown', () => {
+  document.addEventListener('mousedown', (e) => {
+    // ЛКМ = лечить, ПКМ = отклонить (только когда курсор захвачен и есть выбранный пациент)
+    if (game.controls && game.controls.isLocked && game.selectedPatient && !game.modal && !game.showShiftIntro) {
+      if (e.button === 0) { treatPatient(); return; }
+      if (e.button === 2) { rejectPatient(); return; }
+    }
     if (!game.controls.isLocked && !game.modal && !game.showShiftIntro) {
       safeLock();
     }
+  });
+  // Отключаем контекстное меню (ПКМ = отклонить)
+  document.addEventListener('contextmenu', (e) => {
+    if (game.controls && game.controls.isLocked) e.preventDefault();
   });
   game.controls.addEventListener('lock', () => {
     Audio.init();
@@ -1453,7 +1575,7 @@ function makeTouchButton(id, label, position, color) {
 function selectNearestPatient() {
   if (!game.camera) return;
   let nearest = null, minDist = 8;
-  const camPos = game.camera.position;
+  const camPos = game.playerPos || game.camera.position;
   game.patients.forEach(p => {
     if (!p.mesh) return;
     const d = p.mesh.position.distanceTo(camPos);
@@ -1503,7 +1625,7 @@ function tryInteract() {
 
   // 2. Fallback: ближайший пациент в радиусе 6 (только если нет стены между ним и игроком)
   let nearest = null, minDist = 6;
-  const camPos = game.camera.position;
+  const camPos = game.playerPos || game.camera.position;
   game.patients.forEach(p => {
     if (!p.mesh) return;
     const d = p.mesh.position.distanceTo(camPos);
@@ -1627,53 +1749,29 @@ function spawnPatient() {
   // Старый код spawn-поинта полностью заменён логикой выше
   const _da_unused = camPos0; // (подавление неиспользуемой переменной)
 
-  // Маркер над пациентом (светящаяся стрелка вниз)
-  const markerGroup = new THREE.Group();
-  // Стрелка вниз
-  const arrow = new THREE.Mesh(
-    new THREE.ConeGeometry(0.25, 0.6, 4),
-    new THREE.MeshBasicMaterial({ color: p.isAnomaly ? 0xef4444 : 0x6ee7b7 })
-  );
-  arrow.rotation.x = Math.PI; // смотрит вниз
-  arrow.position.y = 2.2;
-  markerGroup.add(arrow);
-  // Кольцо под стрелкой
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.3, 0.4, 16),
-    new THREE.MeshBasicMaterial({ color: p.isAnomaly ? 0xef4444 : 0x6ee7b7, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
-  );
-  ring.position.y = 0.05;
-  ring.rotation.x = -Math.PI / 2;
-  markerGroup.add(ring);
-  // Имя пациента
-  const labelCanvas = document.createElement('canvas');
-  labelCanvas.width = 256; labelCanvas.height = 64;
-  const lctx = labelCanvas.getContext('2d');
-  lctx.fillStyle = 'rgba(0,0,0,0.6)';
-  lctx.fillRect(0, 0, 256, 64);
-  lctx.fillStyle = p.isAnomaly ? '#fca5a5' : '#6ee7b7';
-  lctx.font = 'bold 32px sans-serif';
-  lctx.textAlign = 'center';
-  lctx.fillText(p.name + (p.isAnomaly ? ' ⚠' : ''), 128, 42);
-  const labelTex = new THREE.CanvasTexture(labelCanvas);
-  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true }));
-  label.position.y = 1.7;
-  label.scale.set(1.5, 0.4, 1);
-  markerGroup.add(label);
-  markerGroup.position.set(entrance.x, 0, entrance.z);
-  markerGroup.userData.isMarker = true;
-  game.scene.add(markerGroup);
+  // Маркеры-стрелки над пациентами УБРАНЫ: достаточно внешнего вида.
+  // Аномалии внешне не отличаются — их видно только на телевизоре с камерами.
 
-  // === СТЕЙТ-МАШИНА: вход → ресепшн → кабинет ===
+  // Маршрут через дверь кабинета: ресепшн → точка перед дверью → место в кабинете
+  let doorPoint = null;
+  if (roomTarget && game.roomDoors) {
+    let bestD = Infinity;
+    for (const dp of game.roomDoors) {
+      const d = dp.distanceTo(roomTarget);
+      if (d < bestD) { bestD = d; doorPoint = dp; }
+    }
+  }
+
+  // === СТЕЙТ-МАШИНА: вход → ресепшн → дверь кабинета → место ===
   game.patients.push({
     ...p,
     mesh: model,
-    marker: markerGroup,
+    marker: null,
     animPhase: Math.random() * 10,
-    waypoints: [entrance, reception, roomTarget].filter(Boolean),
+    waypoints: [entrance, reception, doorPoint, roomTarget].filter(Boolean),
     waypointIdx: 0,
     waitTimer: 0,
-    state: 'walking'  // 'walking' | 'waiting_at_reception'
+    state: 'walking'  // 'walking' | 'waiting_at_reception' | 'yielding'
   });
   addLog('info', 'Новый пациент: ' + p.name + ' идёт в регистратуру');
   renderHud();
@@ -1742,7 +1840,7 @@ function renderHud() {
     html += '<div class="patient-card-big" id="patientCard">';
     html += '<div class="pcb-header">';
     html += '<div class="pcb-name">' + p.name + '</div>';
-    html += '<div class="pcb-dist">' + dist + 'м</div>';
+    html += '<div class="pcb-dist" id="pcbDist">' + dist + 'м</div>';
     html += '</div>';
     html += '<div class="pcb-condition">' + p.condition.label + '</div>';
     html += '<div class="pcb-symptom">' + p.condition.symptom + '</div>';
@@ -1868,7 +1966,7 @@ function update() {
   const dt = Math.min(game.clock.getDelta(), 0.1);
   game.animTime += dt;
 
-  // Movement (ИНВЕРТИРОВАНО: W=назад, S=вперёд) + коллизии + джойстик
+  // Movement (W=вперёд, S=назад) + коллизии + джойстик. Логика — через playerPos.
   if (game.controls && !game.modal && !game.showShiftIntro) {
     // На сенсорных устройствах pointer lock не активируется — пропускаем проверку
     if (!game.joystick && game.controls && !game.controls.isLocked) return;
@@ -1885,28 +1983,22 @@ function update() {
     const strafe = Math.max(-1, Math.min(1, keyStr));
     const speedMult = ((game.keys['ShiftLeft'] || game.keys['ShiftRight']) || (game.runHeld)) ? 1.8 : 1;
     if (forward !== 0 || strafe !== 0) {
-      // Векторы движения в мире (XZ)
-      const fwd = new THREE.Vector3();
-      game.camera.getWorldDirection(fwd);
-      fwd.y = 0;
-      if (fwd.lengthSq() < 0.0001) fwd.set(0, 0, -1);
-      fwd.normalize();
+      // Направление взгляда по yaw камеры (не зависит от 1-го/3-го лица)
+      const yaw = game.camera.rotation.y;
+      const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
       const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
       const offset = new THREE.Vector3()
         .addScaledVector(fwd, forward * game.moveSpeed * speedMult * dt)
         .addScaledVector(right, strafe * game.moveSpeed * speedMult * dt);
-      const px = game.camera.position.x;
-      const pz = game.camera.position.z;
+      const px = game.playerPos.x;
+      const pz = game.playerPos.z;
       // Пробуем по осям отдельно (скольжение вдоль стен)
       const nx = px + offset.x, nz = pz + offset.z;
-      if (!collidesWorld(nx, pz)) game.camera.position.x = nx;
-      if (!collidesWorld(game.camera.position.x, nz)) game.camera.position.z = nz;
+      if (!collidesWorld(nx, pz)) game.playerPos.x = nx;
+      if (!collidesWorld(game.playerPos.x, nz)) game.playerPos.z = nz;
       game.bobTime += dt * (speedMult === 1.8 ? 12 : 8);
       if (Math.random() < 0.04) Audio.footstep();
     }
-    // Head bob
-    const bobY = Math.sin(game.bobTime) * 0.04;
-    game.camera.position.y = game.playerHeight + bobY;
   }
 
   // === ОБЗОР от правого стика (ИНВЕРТИРОВАН по вертикали: стик вверх = смотреть вниз) ===
@@ -1915,6 +2007,34 @@ function update() {
     game.camera.rotation.y -= game.lookJoystick.x * sens * dt;
     game.camera.rotation.x += game.lookJoystick.y * sens * dt; // инверсия Y
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
+  }
+
+  // === КАМЕРА: 1-е или 3-е лицо (V переключает) ===
+  {
+    const bobY = Math.sin(game.bobTime) * 0.04;
+    if (!game.thirdPerson) {
+      // От первого лица: камера = глаза
+      game.camera.position.set(game.playerPos.x, game.playerHeight + bobY, game.playerPos.z);
+      if (game.catMesh) game.catMesh.visible = false;
+    } else {
+      // От третьего лица: камера позади и выше, кот-врач виден
+      const yaw = game.camera.rotation.y;
+      const back = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)); // назад по взгляду
+      game.camera.position.set(
+        game.playerPos.x + back.x * 4.2,
+        game.playerHeight + 2.1 + bobY * 0.4,
+        game.playerPos.z + back.z * 4.2
+      );
+      if (game.catMesh) {
+        game.catMesh.visible = true;
+        game.catMesh.position.set(game.playerPos.x, 0, game.playerPos.z);
+        // Кот смотрит туда же, куда камера
+        game.catMesh.rotation.y = Math.atan2(-Math.sin(yaw), -Math.cos(yaw));
+        // Виляние хвостом
+        const tail = game.catMesh.children.find(c => c.geometry && c.geometry.type === 'CapsuleGeometry' && c.position.z < 0 && c.position.y < 1.4);
+        if (tail) tail.rotation.z = Math.sin(game.animTime * 4) * 0.3;
+      }
+    }
   }
 
   // Animate patients
@@ -1928,14 +2048,22 @@ function update() {
     if (p.mesh.userData.head) {
       p.mesh.userData.head.rotation.y = Math.sin(p.animPhase * 0.5) * 0.3;
     }
-    // === ДВИЖЕНИЕ ПО МАРШРУТУ (вход → ресепшн → кабинет) ===
+    // === ДВИЖЕНИЕ ПО МАРШРУТУ (вход → ресепшн → дверь → кабинет) ===
     if (p.waypoints && p.waypointIdx < p.waypoints.length) {
       const target = p.waypoints[p.waypointIdx];
       const pos = p.mesh.position;
       const dx = target.x - pos.x;
       const dz = target.z - pos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < 0.3) {
+      // Уступание дороги: если игрок слишком близко — стоим и ждём (не проходим сквозь него)
+      const pdx = game.playerPos ? game.playerPos.x - pos.x : 0;
+      const pdz = game.playerPos ? game.playerPos.z - pos.z : 0;
+      const pdist = Math.sqrt(pdx * pdx + pdz * pdz);
+      if (pdist < 1.4) {
+        // Стоим, поворачиваемся к игроку (уступают дорогу)
+        p.mesh.rotation.y = Math.atan2(pdx, pdz);
+        p.mesh.position.y = Math.sin(p.animPhase * 2) * 0.05;
+      } else if (dist < 0.3) {
         // Пришли на точку
         p.waypointIdx++;
         // Если это ресепшн (точка 1) — ждём 2-3 сек, потом идём в кабинет
@@ -1998,9 +2126,9 @@ function update() {
     }
   });
 
-  // === АВТОВЫБОР пациента при подходе близко (ТОЛЬКО если есть прямая видимость) ===
-  if (game.camera) {
-    const camPos = game.camera.position;
+  // === АВТОВЫБОР ближайшего пациента (только при прямой видимости) ===
+  if (game.camera && game.playerPos) {
+    const camPos = game.playerPos; // логическая позиция игрока (работает и в 3-м лице)
     let nearest = null, minDist = 4.0;
     game.patients.forEach(p => {
       if (!p.mesh) return;
@@ -2028,9 +2156,13 @@ function update() {
     } else if (newSelected) {
       selectPatient(nearest);
       showToast('✓ Выбран: ' + nearest.name + ' (' + minDist.toFixed(1) + 'м)', 'ok');
-    } else if (nearest && Math.random() < 0.03) {
-      // Каждые ~1 сек обновляем дистанцию в карточке
-      renderHud();
+    }
+
+    // === ЖИВЫЕ МЕТРЫ: дистанция в карточке обновляется каждый кадр ===
+    const distEl = document.getElementById('pcbDist');
+    if (distEl && game.selectedPatient && game.selectedPatient.mesh) {
+      const d = game.selectedPatient.mesh.position.distanceTo(camPos);
+      distEl.textContent = d.toFixed(1) + 'м';
     }
   }
 
@@ -2072,7 +2204,7 @@ function update() {
 
   // === АНИМАЦИЯ ДВЕРЕЙ: открываются при подходе игрока, закрываются при отходе ===
   if (game.doors && game.camera) {
-    const camPos = game.camera.position;
+    const camPos = game.playerPos || game.camera.position;
     const doorWorldPos = new THREE.Vector3();
     game.doors.forEach(door => {
       door.getWorldPosition(doorWorldPos);
@@ -2095,7 +2227,20 @@ function update() {
 function animate() {
   requestAnimationFrame(animate);
   update();
-  if (game.renderer) game.renderer.render(game.scene, game.camera);
+  if (game.renderer && game.scene && game.camera) {
+    // === РЕНДЕР ТЕЛЕВИЗОРА (камера наблюдения → текстура) ===
+    // Каждые 2 кадра для производительности. Аномалии светятся красным ТОЛЬКО на ТВ.
+    game.tvFrameCount = (game.tvFrameCount || 0) + 1;
+    if (game.tvRT && game.tvCam && game.tvFrameCount % 2 === 0) {
+      const auras = game.anomalyAuras || [];
+      auras.forEach(a => { a.visible = true; });
+      game.renderer.setRenderTarget(game.tvRT);
+      game.renderer.render(game.scene, game.tvCam);
+      game.renderer.setRenderTarget(null);
+      auras.forEach(a => { a.visible = false; });
+    }
+    game.renderer.render(game.scene, game.camera);
+  }
 }
 
 // ============================================================
