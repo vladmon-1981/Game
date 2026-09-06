@@ -390,6 +390,7 @@ const game = {
   animTime: 0,
   shift: 1,
   shiftTarget: 5,
+  hasPointerLock: false, // выставится в true после создания controls, если API доступен
   shiftProgress: 0,
   coins: 50,
   sanity: 100,
@@ -1140,6 +1141,8 @@ function initThree() {
   // Controls
   game.controls = new PointerLockControls(game.camera, game.renderer.domElement);
   game.clock = new THREE.Clock();
+  // Pointer Lock API доступен только на десктопах. На iPad/mobile вызов .lock() упадёт.
+  game.hasPointerLock = !!(game.renderer.domElement.requestPointerLock || game.renderer.domElement.mozRequestPointerLock || game.renderer.domElement.webkitRequestPointerLock);
 
   // Resize handler
   window.addEventListener('resize', () => {
@@ -1154,6 +1157,17 @@ function initThree() {
 // ============================================================
 // INPUT
 // ============================================================
+// Безопасный pointer lock — на iPad/mobile API отсутствует
+function safeLock() {
+  if (!game.controls) return;
+  if (!game.hasPointerLock) return; // iOS / мобильные — просто игнорируем
+  try {
+    game.controls.lock();
+  } catch (e) {
+    console.warn('[AH] lock() failed:', e);
+  }
+}
+
 function setupInput() {
   console.log('[AH] setupInput() старт');
   document.addEventListener('keydown', (e) => {
@@ -1174,7 +1188,7 @@ function setupInput() {
   });
   document.addEventListener('mousedown', () => {
     if (!game.controls.isLocked && !game.modal && !game.showShiftIntro) {
-      game.controls.lock();
+      safeLock();
     }
   });
   game.controls.addEventListener('lock', () => {
@@ -1426,7 +1440,7 @@ function selectNearestPatient() {
 // ============================================================
 function tryInteract() {
   if (!game.controls.isLocked) {
-    game.controls.lock();
+    safeLock();
     return;
   }
   // 1. Попробуем raycast (прицел на пациенте)
@@ -1756,7 +1770,7 @@ function showShiftIntro() {
     game.showShiftIntro = false;
     game.modal = null;
     document.getElementById('shiftIntro').remove();
-    game.controls.lock();
+    safeLock();
     spawnPatient();
     renderHud();
   };
