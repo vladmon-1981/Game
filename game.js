@@ -2305,12 +2305,13 @@ function update() {
 
 function animate() {
   requestAnimationFrame(animate);
-  update();
+  const animDt = (game.clock ? game.clock.getDelta() : 1/60);
+  update(animDt);
   if (game.renderer && game.scene && game.camera) {
     // === РЕНДЕР ТЕЛЕВИЗОРА (2 камеры → 2 RT) ===
     // Лёгкое CCTV-покачивание камер, аномалии видны только на ТВ.
     game.tvFrameCount = (game.tvFrameCount || 0) + 1;
-    game.tvPan = (game.tvPan || 0) + dt * 0.3;
+    game.tvPan = (game.tvPan || 0) + animDt * 0.3;
     if (game.tvRT1 && game.tvCam1 && game.tvRT2 && game.tvCam2) {
       const auras = game.anomalyAuras || [];
       // Подвигаем камеры как CCTV
