@@ -1515,9 +1515,9 @@ function setupTouchUI() {
   document.addEventListener('pointerup', onLookEnd);
   document.addEventListener('pointercancel', onLookEnd);
 
-  // === DRAG-ОБЗОР ИЗ ЛЮБОЙ ТОЧКИ ЭКРАНА (стандарт: палец вверх = взгляд вверх) ===
+  // === DRAG-ОБЗОР ИЗ ЛЮБОЙ ТОЧКИ ЭКРАНА (инвертирован: палец вверх = взгляд вниз) ===
   // Свайп в любом свободном месте вращает камеру:
-  //   влево/вправо — поворот, вверх — взгляд вверх, вниз — взгляд вниз (стандарт)
+  //   влево/вправо — поворот, вверх — взгляд вниз, вниз — взгляд вверх (инверсия)
   let dragLookId = null;
   let dragLastX = 0, dragLastY = 0;
   document.addEventListener('pointerdown', (e) => {
@@ -1538,7 +1538,7 @@ function setupTouchUI() {
     dragLastY = e.clientY;
     const sens = 0.004;
     game.camera.rotation.y -= dx * sens;
-    game.camera.rotation.x -= dy * sens; // СТАНДАРТ: палец вверх → взгляд вверх
+    game.camera.rotation.x += dy * sens; // ИНВЕРСИЯ: палец вверх → взгляд вниз
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   });
   document.addEventListener('pointerup', (e) => {
@@ -2005,7 +2005,7 @@ function update() {
   if (game.lookJoystick && game.camera && (game.lookJoystick.active || game.lookJoystick.x || game.lookJoystick.y)) {
     const sens = 2.2; // рад/сек при полном отклонении
     game.camera.rotation.y -= game.lookJoystick.x * sens * dt;
-    game.camera.rotation.x -= game.lookJoystick.y * sens * dt; // стик вверх → взгляд вверх
+    game.camera.rotation.x += game.lookJoystick.y * sens * dt; // стик вверх → взгляд вниз
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   }
 
