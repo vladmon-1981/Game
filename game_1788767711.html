@@ -1555,6 +1555,7 @@ function initThree() {
   );
   tvScreen1.position.set(-0.78, 0, 0.08);
   tv.add(tvScreen1);
+  game.tvScreen1 = tvScreen1;
   // Экран 2 (правая половина, общий план)
   const tvScreen2 = new THREE.Mesh(
     new THREE.PlaneGeometry(1.55, 1.78),
@@ -1562,6 +1563,7 @@ function initThree() {
   );
   tvScreen2.position.set(0.78, 0, 0.08);
   tv.add(tvScreen2);
+  game.tvScreen2 = tvScreen2;
   // Разделительная полоска между экранами
   const tvDivider = new THREE.Mesh(
     new THREE.BoxGeometry(0.04, 1.78, 0.02),
@@ -2529,8 +2531,10 @@ function segmentIntersectsRect(x1, z1, x2, z2, rx1, rz1, rx2, rz2) {
 // ============================================================
 // GAME LOOP
 // ============================================================
-function update() {
-  const dt = Math.min(game.clock.getDelta(), 0.1);
+function update(dtArg) {
+  // ВАЖНО: getDelta() вызывается ОДИН раз в animate(). Не дублировать здесь.
+  // Если update() вызвали без dt — fallback (для обратной совместимости).
+  const dt = (dtArg !== undefined) ? Math.min(dtArg, 0.1) : Math.min(game.clock.getDelta(), 0.1);
   game.animTime += dt;
 
   // === ДВИЖЕНИЕ (без сложных guards — всегда работает когда есть playerPos/camera) ===
@@ -2832,6 +2836,12 @@ function animate() {
       game.tvCam1.lookAt(0, 1.2, -9);
       game.tvCam2.position.x = 13 + pan2;
       game.tvCam2.lookAt(0, 0.6, 0);
+      // ВАЖНО: временно снимаем текстуры с экранов ТВ чтобы избежать
+      // GL Feedback Loop (рендер в RT, который сам использует эту RT как текстуру)
+      const s1map = game.tvScreen1 && game.tvScreen1.material.map;
+      const s2map = game.tvScreen2 && game.tvScreen2.material.map;
+      if (game.tvScreen1) game.tvScreen1.material.map = null;
+      if (game.tvScreen2) game.tvScreen2.material.map = null;
       // Камера 1
       auras.forEach(a => { a.visible = true; });
       game.renderer.setRenderTarget(game.tvRT1);
@@ -2842,6 +2852,11 @@ function animate() {
       game.renderer.render(game.scene, game.tvCam2);
       game.renderer.setRenderTarget(null);
       auras.forEach(a => { a.visible = false; });
+      // Восстанавливаем текстуры
+      if (game.tvScreen1) game.tvScreen1.material.map = s1map;
+      if (game.tvScreen2) game.tvScreen2.material.map = s2map;
+      game.tvScreen1.material.needsUpdate = true;
+      game.tvScreen2.material.needsUpdate = true;
     }
     game.renderer.render(game.scene, game.camera);
   }
@@ -2880,6 +2895,8 @@ try {
   renderHud();
   // showShiftIntro(); // отключено — стартуем сразу без модалки
   spawnPatient();
+  // Хук для smoke-тестов и devtools (см. CLAUDE.md)
+  window.__AH__ = game;
   animate();
   addLog('ok', 'Система готова. Кликни "Начать смену 1"');
   console.log('[AH] Boot завершён');
