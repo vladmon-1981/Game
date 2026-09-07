@@ -372,6 +372,8 @@ const game = {
   camera: null,
   renderer: null,
   controls: null,
+  queue: [], // очередь пациентов у ресепшн
+  queueSpacing: 1.2, // расстояние между пациентами в очереди (вдоль Z)
   clock: null,
   patients: [],
   selectedPatient: null,
@@ -1109,12 +1111,18 @@ function initThree() {
   game.scene.add(npc);
   game.npc = npc;
 
-  // === ТЕЛЕВИЗОР НАД РЕСЕПШН (камеры наблюдения) ===
-  // Рендер-таргет: изображение с камеры видеонаблюдения
-  game.tvRT = new THREE.WebGLRenderTarget(512, 288);
-  game.tvCam = new THREE.PerspectiveCamera(55, 16 / 9, 0.5, 60);
-  game.tvCam.position.set(16, 3.6, 14);
-  game.tvCam.lookAt(0, 0, 0);
+  // === ТЕЛЕВИЗОР НАД РЕСЕПШН (камеры наблюдения, 2 камеры split-screen) ===
+  // Два рендер-таргета + две камеры: левая смотрит со стороны входа,
+  // правая — общий план зала. Аномалии светятся красным ТОЛЬКО на ТВ.
+  game.tvRT1 = new THREE.WebGLRenderTarget(512, 288);
+  game.tvRT2 = new THREE.WebGLRenderTarget(512, 288);
+  game.tvCam1 = new THREE.PerspectiveCamera(60, 16 / 9, 0.3, 60);
+  game.tvCam1.position.set(0, 2.6, 19.5);   // у входа, смотрит на ресепшн
+  game.tvCam1.lookAt(0, 1.2, -9);
+  game.tvCam2 = new THREE.PerspectiveCamera(55, 16 / 9, 0.3, 60);
+  game.tvCam2.position.set(13, 3.2, 11);    // общий план из угла зала
+  game.tvCam2.lookAt(0, 0.6, 0);
+  game.tvPan = 0; // фаза для лёгкого "CCTV" покачивания
 
   const tv = new THREE.Group();
   // Кронштейн к потолку
@@ -1124,23 +1132,37 @@ function initThree() {
   );
   tvPole.position.y = 1.25;
   tv.add(tvPole);
-  // Корпус ТВ
+  // Корпус ТВ (пошире для двух экранов)
   const tvFrame = new THREE.Mesh(
-    new THREE.BoxGeometry(3.4, 2.0, 0.14),
+    new THREE.BoxGeometry(3.6, 2.1, 0.14),
     new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.35, metalness: 0.5 })
   );
   tvFrame.position.y = 0;
   tv.add(tvFrame);
-  // Экран (текстура с камеры)
-  const tvScreen = new THREE.Mesh(
-    new THREE.PlaneGeometry(3.15, 1.78),
-    new THREE.MeshBasicMaterial({ map: game.tvRT.texture, color: 0xc8ffd8 })
+  // Экран 1 (левая половина, камера у входа)
+  const tvScreen1 = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.55, 1.78),
+    new THREE.MeshBasicMaterial({ map: game.tvRT1.texture, color: 0xc8ffd8 })
   );
-  tvScreen.position.set(0, 0, 0.08);
-  tv.add(tvScreen);
+  tvScreen1.position.set(-0.78, 0, 0.08);
+  tv.add(tvScreen1);
+  // Экран 2 (правая половина, общий план)
+  const tvScreen2 = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.55, 1.78),
+    new THREE.MeshBasicMaterial({ map: game.tvRT2.texture, color: 0xc8ffd8 })
+  );
+  tvScreen2.position.set(0.78, 0, 0.08);
+  tv.add(tvScreen2);
+  // Разделительная полоска между экранами
+  const tvDivider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 1.78, 0.02),
+    new THREE.MeshBasicMaterial({ color: 0x000000 })
+  );
+  tvDivider.position.set(0, 0, 0.09);
+  tv.add(tvDivider);
   // Рамка-безель
   const tvBezel = new THREE.Mesh(
-    new THREE.BoxGeometry(3.55, 2.15, 0.1),
+    new THREE.BoxGeometry(3.75, 2.25, 0.1),
     new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.5 })
   );
   tvBezel.position.set(0, 0, -0.03);
@@ -1150,7 +1172,7 @@ function initThree() {
     new THREE.SphereGeometry(0.035, 8, 8),
     new THREE.MeshBasicMaterial({ color: 0xff2222 })
   );
-  tvLed.position.set(1.6, -0.85, 0.08);
+  tvLed.position.set(1.7, -0.9, 0.08);
   tv.add(tvLed);
   // Табличка "ВИДЕОНАБЛЮДЕНИЕ"
   const tvSignCanvas = document.createElement('canvas');
@@ -1650,12 +1672,19 @@ function selectPatient(p) {
 }
 
 function treatPatient() {
-  if (!game.selectedPatient) return;
-  const p = game.selectedPatient;
+  // Лечим ПЕРВОГО в очереди у ресепшн (или выбранного, если он в очереди)
+  game.queue = game.queue || [];
+  let p = game.queue[0];
+  if (p && game.selectedPatient && game.queue.indexOf(game.selectedPatient) === 0) {
+    p = game.selectedPatient;
+  }
+  if (!p) {
+    showToast('Подойди к ресепшн', 'bad');
+    return;
+  }
   if (p.isAnomaly) {
     addLog('bad', '⚠ АНОМАЛИЯ! ' + p.name + ' — это была ловушка!');
     showToast('Аномалия! Пациент исчез...', 'bad');
-    // Покрасить всех детей в красный (mesh — это Group)
     if (p.mesh) {
       p.mesh.traverse(c => {
         if (c.isMesh && c.material) {
@@ -1671,13 +1700,32 @@ function treatPatient() {
     game.coins += 15;
     addLog('ok', 'Вылечен: ' + p.name + '. +15 монет.');
     showToast('+15 монет!', 'ok');
-    removePatient(p);
+    // Убираем из очереди и отправляем в кабинет
+    game.queue = game.queue.filter(x => x.id !== p.id);
+    p.state = 'walking';
+    p.waypointIdx = 2; // идём к двери → в кабинет
+    if (p.mesh) game.scene.remove(p.mesh);
+    if (p.marker) game.scene.remove(p.marker);
+    game.patients = game.patients.filter(x => x.id !== p.id);
+    if (game.selectedPatient && game.selectedPatient.id === p.id) game.selectedPatient = null;
+    game.shiftProgress++;
+    if (game.shiftProgress >= game.shiftTarget) {
+      addLog('ok', '=== СМЕНА ' + game.shift + ' ЗАВЕРШЕНА! ===');
+    }
+    renderHud();
   }
 }
 
 function rejectPatient() {
-  if (!game.selectedPatient) return;
-  const p = game.selectedPatient;
+  game.queue = game.queue || [];
+  let p = game.queue[0];
+  if (p && game.selectedPatient && game.queue.indexOf(game.selectedPatient) === 0) {
+    p = game.selectedPatient;
+  }
+  if (!p) {
+    showToast('Подойди к ресепшн', 'bad');
+    return;
+  }
   if (p.isAnomaly) {
     Audio.tone(1200, 0.1, 'sine', 0.2);
     game.coins += 20;
@@ -1692,6 +1740,8 @@ function rejectPatient() {
 }
 
 function removePatient(p) {
+  // Убираем из очереди (если был)
+  game.queue = (game.queue || []).filter(x => x.id !== p.id);
   if (p.mesh) game.scene.remove(p.mesh);
   if (p.marker) game.scene.remove(p.marker);
   game.patients = game.patients.filter(x => x.id !== p.id);
@@ -1984,8 +2034,15 @@ function update() {
     const speedMult = ((game.keys['ShiftLeft'] || game.keys['ShiftRight']) || (game.runHeld)) ? 1.8 : 1;
     if (forward !== 0 || strafe !== 0) {
       // Направление взгляда по yaw камеры (не зависит от 1-го/3-го лица)
-      const yaw = game.camera.rotation.y;
-      const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+      // Направление движения: в 1-м лице — направление взгляда игрока,
+      // в 3-м лице — направление, куда смотрит КОТ (противоположно взгляду камеры,
+      // т.к. камера стоит ЗА спиной кота)
+      const lookDir = new THREE.Vector3();
+      game.camera.getWorldDirection(lookDir);
+      lookDir.y = 0;
+      if (lookDir.lengthSq() < 0.0001) lookDir.set(0, 0, -1);
+      lookDir.normalize();
+      const fwd = game.thirdPerson ? lookDir.clone().negate() : lookDir;
       const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
       const offset = new THREE.Vector3()
         .addScaledVector(fwd, forward * game.moveSpeed * speedMult * dt)
@@ -2048,53 +2105,65 @@ function update() {
     if (p.mesh.userData.head) {
       p.mesh.userData.head.rotation.y = Math.sin(p.animPhase * 0.5) * 0.3;
     }
+    // === ОЧЕРЕДЬ НА РЕСЕПШН (пациенты стоят в очереди с шагом game.queueSpacing) ===
+    if (p.state === 'in_queue') {
+      // Своя позиция в очереди (м.б. изменилась после ухода предыдущего)
+      const idx = (game.queue || []).indexOf(p);
+      if (idx === -1) {
+        // Уже не в очереди — обычное движение
+        p.state = 'walking';
+      } else {
+        const queueX = 0;
+        const queueZ = -9 - idx * (game.queueSpacing || 1.2);
+        const dx = queueX - pos.x;
+        const dz = queueZ - pos.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist > 0.15) {
+          // Идём на своё место в очереди
+          const speed = 1.6;
+          p.mesh.position.x += (dx / dist) * speed * dt;
+          p.mesh.position.z += (dz / dist) * speed * dt;
+          p.mesh.rotation.y = Math.atan2(dx, dz);
+          p.mesh.position.y = Math.abs(Math.sin(p.animPhase * 5)) * 0.07;
+        } else {
+          // Стоим — смотрим на стойку (к ресепшн = -Z)
+          p.mesh.rotation.y = Math.atan2(0 - p.mesh.position.x, -10 - p.mesh.position.z);
+          p.mesh.position.y = Math.sin(p.animPhase * 2) * 0.03;
+        }
+      }
+    }
     // === ДВИЖЕНИЕ ПО МАРШРУТУ (вход → ресепшн → дверь → кабинет) ===
-    if (p.waypoints && p.waypointIdx < p.waypoints.length) {
+    else if (p.waypoints && p.waypointIdx < p.waypoints.length) {
       const target = p.waypoints[p.waypointIdx];
       const pos = p.mesh.position;
       const dx = target.x - pos.x;
       const dz = target.z - pos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      // Уступание дороги: если игрок слишком близко — стоим и ждём (не проходим сквозь него)
+      // Уступание дороги: если игрок слишком близко — стоим и ждём
       const pdx = game.playerPos ? game.playerPos.x - pos.x : 0;
       const pdz = game.playerPos ? game.playerPos.z - pos.z : 0;
       const pdist = Math.sqrt(pdx * pdx + pdz * pdz);
       if (pdist < 1.4) {
-        // Стоим, поворачиваемся к игроку (уступают дорогу)
         p.mesh.rotation.y = Math.atan2(pdx, pdz);
         p.mesh.position.y = Math.sin(p.animPhase * 2) * 0.05;
       } else if (dist < 0.3) {
         // Пришли на точку
         p.waypointIdx++;
-        // Если это ресепшн (точка 1) — ждём 2-3 сек, потом идём в кабинет
         if (p.waypointIdx === 1) {
-          p.state = 'waiting_at_reception';
-          p.waitTimer = 2 + Math.random() * 1.5;
+          // === ДОШЛИ ДО РЕСЕПШН → ВСТАЁМ В ОЧЕРЕДЬ ===
+          p.state = 'in_queue';
+          game.queue = game.queue || [];
+          game.queue.push(p);
+          addLog('info', p.name + ' встал в очередь (' + game.queue.length + '-й)');
         } else if (p.waypointIdx >= p.waypoints.length) {
           p.state = 'arrived';
         }
       } else {
-        // Идём к точке
-        const speed = 1.4; // ед/с
+        const speed = 1.4;
         p.mesh.position.x += (dx / dist) * speed * dt;
         p.mesh.position.z += (dz / dist) * speed * dt;
-        // Поворот в сторону движения
         p.mesh.rotation.y = Math.atan2(dx, dz);
-        // Покачивание при ходьбе
         p.mesh.position.y = Math.abs(Math.sin(p.animPhase * 6)) * 0.08;
-      }
-    } else if (p.state === 'waiting_at_reception') {
-      // Стоим на ресепшн, ждём
-      p.waitTimer -= dt;
-      // Смотрим в сторону стойки ресепшн
-      const lookTarget = new THREE.Vector3(0, 0, -10);
-      const dx = lookTarget.x - p.mesh.position.x;
-      const dz = lookTarget.z - p.mesh.position.z;
-      p.mesh.rotation.y = Math.atan2(dx, dz);
-      if (p.waitTimer <= 0) {
-        // Регистрация завершена — идём в кабинет
-        p.state = 'walking';
-        // waypointIdx уже указывает на кабинет (после ресепшн)
       }
     }
     // Маркер следует за пациентом
@@ -2130,11 +2199,21 @@ function update() {
   if (game.camera && game.playerPos) {
     const camPos = game.playerPos; // логическая позиция игрока (работает и в 3-м лице)
     let nearest = null, minDist = 4.0;
+    // Сначала ищем ПЕРВОГО в очереди (он главный кандидат, если близко)
+    if (game.queue && game.queue.length > 0) {
+      const q0 = game.queue[0];
+      if (q0 && q0.mesh) {
+        const dq = q0.mesh.position.distanceTo(camPos);
+        if (dq < 4.5 && hasLineOfSight(camPos.x, camPos.z, q0.mesh.position.x, q0.mesh.position.z)) {
+          nearest = q0;
+          minDist = dq;
+        }
+      }
+    }
     game.patients.forEach(p => {
       if (!p.mesh) return;
       const d = p.mesh.position.distanceTo(camPos);
       if (d >= minDist) return;
-      // Прямая видимость: нет стены между игроком и пациентом
       if (!hasLineOfSight(camPos.x, camPos.z, p.mesh.position.x, p.mesh.position.z)) return;
       minDist = d;
       nearest = p;
@@ -2228,14 +2307,27 @@ function animate() {
   requestAnimationFrame(animate);
   update();
   if (game.renderer && game.scene && game.camera) {
-    // === РЕНДЕР ТЕЛЕВИЗОРА (камера наблюдения → текстура) ===
-    // Каждые 2 кадра для производительности. Аномалии светятся красным ТОЛЬКО на ТВ.
+    // === РЕНДЕР ТЕЛЕВИЗОРА (2 камеры → 2 RT) ===
+    // Лёгкое CCTV-покачивание камер, аномалии видны только на ТВ.
     game.tvFrameCount = (game.tvFrameCount || 0) + 1;
-    if (game.tvRT && game.tvCam && game.tvFrameCount % 2 === 0) {
+    game.tvPan = (game.tvPan || 0) + dt * 0.3;
+    if (game.tvRT1 && game.tvCam1 && game.tvRT2 && game.tvCam2) {
       const auras = game.anomalyAuras || [];
+      // Подвигаем камеры как CCTV
+      const pan1 = Math.sin(game.tvPan) * 0.6;
+      const pan2 = Math.cos(game.tvPan * 0.7) * 0.8;
+      game.tvCam1.position.x = 0 + pan1;
+      game.tvCam1.lookAt(0, 1.2, -9);
+      game.tvCam2.position.x = 13 + pan2;
+      game.tvCam2.lookAt(0, 0.6, 0);
+      // Камера 1
       auras.forEach(a => { a.visible = true; });
-      game.renderer.setRenderTarget(game.tvRT);
-      game.renderer.render(game.scene, game.tvCam);
+      game.renderer.setRenderTarget(game.tvRT1);
+      game.renderer.render(game.scene, game.tvCam1);
+      game.renderer.setRenderTarget(null);
+      // Камера 2
+      game.renderer.setRenderTarget(game.tvRT2);
+      game.renderer.render(game.scene, game.tvCam2);
       game.renderer.setRenderTarget(null);
       auras.forEach(a => { a.visible = false; });
     }
