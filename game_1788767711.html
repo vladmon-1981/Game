@@ -2623,6 +2623,7 @@ function update() {
         // Уже не в очереди — обычное движение
         p.state = 'walking';
       } else {
+        const pos = p.mesh.position;
         const queueX = 0;
         const queueZ = -9 - idx * (game.queueSpacing || 1.2);
         const dx = queueX - pos.x;
