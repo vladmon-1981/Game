@@ -806,6 +806,11 @@ const game = {
   raycaster: new THREE.Raycaster()
 };
 
+// Тестовый хук: smoke-тест (tests/smoke.mjs) читает отсюда состояние игры, чтобы
+// проверить, что игровой цикл реально идёт (игрок движется, пациенты идут).
+// Только для чтения из тестов; игровой код на window.__AH__ не полагается.
+window.__AH__ = game;
+
 // ============================================================
 // LOG
 // ============================================================
@@ -2557,9 +2562,10 @@ function segmentIntersectsRect(x1, z1, x2, z2, rx1, rz1, rx2, rz2) {
 // GAME LOOP
 // ============================================================
 function update(dtArg) {
-  // ВАЖНО: getDelta() вызывается ОДИН раз в animate(). Не дублировать здесь.
-  // Если update() вызвали без dt — fallback (для обратной совместимости).
-  const dt = (dtArg !== undefined) ? Math.min(dtArg, 0.1) : Math.min(game.clock.getDelta(), 0.1);
+  // dt приходит из animate() — там clock.getDelta() уже вызван. Повторный вызов
+  // getDelta() здесь съедал бы дельту второй раз и возвращал ~0 (таймер сбрасывается
+  // при каждом вызове), из-за чего весь игровой цикл шёл почти замороженным.
+  const dt = Math.min(dtArg !== undefined ? dtArg : (game.clock ? game.clock.getDelta() : 1 / 60), 0.1);
   game.animTime += dt;
 
   // === ДВИЖЕНИЕ (без сложных guards — всегда работает когда есть playerPos/camera) ===
@@ -2920,9 +2926,7 @@ try {
   renderHud();
   // showShiftIntro(); // отключено — стартуем сразу без модалки
   spawnPatient();
-  // Хук для smoke-тестов и devtools (см. CLAUDE.md)
-  window.__AH__ = game;
-  animate();
+  animate();  // хук window.__AH__ = game объявлен сразу после объекта game
   addLog('ok', 'Система готова. Кликни "Начать смену 1"');
   console.log('[AH] Boot завершён');
 } catch (e) {

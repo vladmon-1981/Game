@@ -1,0 +1,42 @@
+name: Smoke test
+
+# Проверяем, что игровой цикл жив: игрок двигается, пациент доходит до очереди,
+# в консоли нет ошибок. Нужно потому, что ошибки внутри update() не роняют
+# страницу видимым образом — игра продолжает рендериться, а половина логики
+# при этом молча мертва.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Serve the game
+        run: |
+          python3 -m http.server 8091 >/tmp/http.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://localhost:8091/index.html && break
+            sleep 0.5
+          done
+
+      - name: Run smoke test
+        run: node tests/smoke.mjs
