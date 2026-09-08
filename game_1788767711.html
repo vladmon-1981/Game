@@ -2635,10 +2635,11 @@ function update(dtArg) {
   // Добавлено по просьбе пользователя: управление взглядом без мыши
   if (game.camera && game.keys) {
     const sensArrow = 1.8;
-    if (game.keys['ArrowLeft'])  { game.camera.rotation.y += sensArrow * dt; } // инвертировано
-    if (game.keys['ArrowRight']) { game.camera.rotation.y -= sensArrow * dt; } // инвертировано
-    if (game.keys['ArrowUp'])    { game.camera.rotation.x += sensArrow * dt; } // инвертировано
-    if (game.keys['ArrowDown'])  { game.camera.rotation.x -= sensArrow * dt; } // инвертировано
+    const dir3 = game.thirdPerson ? -1 : 1;
+    if (game.keys['ArrowLeft'])  { game.camera.rotation.y += dir3 * sensArrow * dt; } // инвертировано + 3rd
+    if (game.keys['ArrowRight']) { game.camera.rotation.y -= dir3 * sensArrow * dt; } // инвертировано + 3rd
+    if (game.keys['ArrowUp'])    { game.camera.rotation.x += dir3 * sensArrow * dt; } // инвертировано + 3rd
+    if (game.keys['ArrowDown'])  { game.camera.rotation.x -= dir3 * sensArrow * dt; } // инвертировано + 3rd
     game.camera.rotation.z = 0;
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   }
@@ -2958,7 +2959,7 @@ try {
   initThree();
   setupInput();
   renderHud();
-  // showShiftIntro(); // отключено — стартуем сразу без модалки
+  showShiftIntro();
   spawnPatient();
   animate();  // хук window.__AH__ = game объявлен сразу после объекта game
   addLog('ok', 'Система готова. Кликни "Начать смену 1"');
