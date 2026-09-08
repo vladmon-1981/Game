@@ -6,6 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" href="data:," />
 <title>Animal Hospital 3D</title>
 <style>
   :root {
@@ -850,6 +851,12 @@ function initThree() {
   // Camera
   game.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
   game.camera.position.set(0, 1.6, 18);
+  // FPS-порядок эйлеровых углов: сначала yaw (Y), потом pitch (X). При дефолтном 'XYZ'
+  // совместные наклон+поворот (тач-стик/drag) дают КРЕН камеры — горизонт заваливается,
+  // вид "переворачивается" и нормальный ракурс сложно поймать. 'YXZ' исключает крен,
+  // а pitch ограничен ±84° в dragApply/look-стике и PointerLockControls — вид не перевернётся.
+  // Заодно совпадает с внутренним 'YXZ'-эйлером PointerLockControls (r160).
+  game.camera.rotation.order = 'YXZ';
   // Логическая позиция игрока (точка на полу) — авторитет для движения и коллизий
   game.playerPos = new THREE.Vector3(0, 0, 18);
 
@@ -1816,6 +1823,8 @@ function setupInput() {
     const sens = 0.004;
     game.camera.rotation.y -= dx * sens;
     game.camera.rotation.x -= dy * sens;
+    // Крен (z) всегда 0 — вид не может "завалиться"; pitch ограничен — вид не перевернётся
+    game.camera.rotation.z = 0;
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   };
   // Touch (iOS Safari — t.target ненадёжен, проверяем elementFromPoint)
@@ -2603,11 +2612,13 @@ function update(dtArg) {
     }
   }
 
-  // === ОБЗОР от правого стика (ИНВЕРТИРОВАН по вертикали: стик вверх = смотреть вниз) ===
+  // === ОБЗОР от правого стика (стандарт: стик вверх → взгляд вверх) ===
   if (game.lookJoystick && game.camera && (game.lookJoystick.active || game.lookJoystick.x || game.lookJoystick.y)) {
     const sens = 2.2; // рад/сек при полном отклонении
     game.camera.rotation.y -= game.lookJoystick.x * sens * dt;
     game.camera.rotation.x -= game.lookJoystick.y * sens * dt; // стандарт: стик вверх → взгляд вверх
+    // Крен (z) всегда 0 — вид не может "завалиться"; pitch ограничен — вид не перевернётся
+    game.camera.rotation.z = 0;
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   }
 

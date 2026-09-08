@@ -20,6 +20,7 @@ function loadPlaywright() {
   const candidates = [
     process.env.PLAYWRIGHT_PATH,
     'playwright',
+    'playwright-core',
     '/opt/node22/lib/node_modules/playwright'
   ].filter(Boolean);
   for (const c of candidates) {
@@ -29,6 +30,12 @@ function loadPlaywright() {
   process.exit(1);
 }
 const { chromium } = loadPlaywright();
+// PLAYWRIGHT_CHROME_PATH — путь к системному Chrome/Chromium, если браузеры
+// Playwright не установлены (playwright-core всегда требует executablePath).
+// В CI переменная не задана — используется дефолтный браузер Playwright.
+const launchOpts = process.env.PLAYWRIGHT_CHROME_PATH
+  ? { executablePath: process.env.PLAYWRIGHT_CHROME_PATH }
+  : {};
 
 const BASE = process.env.BASE_URL || 'http://localhost:8091';
 
@@ -42,7 +49,7 @@ if (!match) {
 const gameFile = match[1];
 console.log('▶ Тестируем:', gameFile);
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(launchOpts);
 const page = await browser.newPage();
 
 const errors = [];
