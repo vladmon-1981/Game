@@ -802,7 +802,7 @@ const game = {
   hasScanner: false,
   audioOn: true,
   modal: null,
-  showShiftIntro: false, // модалка отключена; true навсегда блокировала lock и клики (круговая блокировка)
+  showShiftIntro: true, // стартовая модалка — круговой блок lock исправлен в mousedown
   // raycasting
   raycaster: new THREE.Raycaster()
 };
@@ -1770,8 +1770,8 @@ function setupInput() {
         return;
       }
     }
-    if (!locked && !game.modal && !game.showShiftIntro) {
-      safeLock();
+    if (!locked && !game.modal) {
+      safeLock(); // позволяем lock даже при старте (showShiftIntro не блокирует)
     }
   });
   document.addEventListener('mouseup', (e) => {
