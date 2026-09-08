@@ -1722,6 +1722,15 @@ function safeLock() {
 
 function setupInput() {
   console.log('[AH] setupInput() старт');
+  // Клик по canvas включает pointer-lock (стандартный FPS-обзор мышью)
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && game.controls && game.controls.isLocked === false && game.hasPointerLock) {
+      const el = e.target;
+      if (el && el.closest && (el.closest('canvas') || el.tagName === 'CANVAS')) {
+        try { game.controls.lock(); } catch (_) {}
+      }
+    }
+  });
   document.addEventListener('keydown', (e) => {
     game.keys[e.code] = true;
     if (e.code === 'KeyE') tryInteract();
@@ -2618,6 +2627,18 @@ function update(dtArg) {
     game.camera.rotation.y -= game.lookJoystick.x * sens * dt;
     game.camera.rotation.x -= game.lookJoystick.y * sens * dt; // стандарт: стик вверх → взгляд вверх
     // Крен (z) всегда 0 — вид не может "завалиться"; pitch ограничен — вид не перевернётся
+    game.camera.rotation.z = 0;
+    game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
+  }
+
+  // === ОБЗОР стрелками клавиатуры (ArrowUp/Down/Left/Right) ===
+  // Добавлено по просьбе пользователя: управление взглядом без мыши
+  if (game.camera && game.keys) {
+    const sensArrow = 1.8;
+    if (game.keys['ArrowLeft'])  { game.camera.rotation.y -= sensArrow * dt; }
+    if (game.keys['ArrowRight']) { game.camera.rotation.y += sensArrow * dt; }
+    if (game.keys['ArrowUp'])    { game.camera.rotation.x -= sensArrow * dt; }
+    if (game.keys['ArrowDown'])  { game.camera.rotation.x += sensArrow * dt; }
     game.camera.rotation.z = 0;
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   }
