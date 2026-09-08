@@ -2182,9 +2182,8 @@ function selectNearestPatient() {
   });
   if (nearest) {
     selectPatient(nearest);
-    showToast('Выбран: ' + nearest.name + ' (' + minDist.toFixed(1) + ' ед.)', 'info');
   } else {
-    showToast('Нет пациентов рядом', 'warn');
+    // Тихо — без тоста, чтобы не пищало (карточка и так отображается)
   }
 }
 
@@ -2882,9 +2881,18 @@ function update(dtArg) {
   }
 
   // === Автоподбор пациента, когда близко (карточка автоматически) ===
-  if (!game.showShiftIntro && !game.selectedPatient && game.patients && game.camera) {
-    selectNearestPatient();
-  }
+    let nearest = null, minDist = 8;
+    const camPos = game.playerPos || game.camera.position;
+    if (game.patients) for (let i = 0; i < game.patients.length; i++) {
+      const p = game.patients[i];
+      if (!p.mesh) continue;
+      const d = p.mesh.position.distanceTo(camPos);
+      if (d < minDist) { minDist = d; nearest = p; }
+    }
+    if (nearest && minDist < 2.0 && !game.selectedPatient) {
+      game.selectedPatient = nearest;
+      renderHud();
+    }
   // Обновляем HUD — динамическое расстояние и карточка
   renderHud();
 }
@@ -2947,7 +2955,7 @@ function showRuntimeError(title, detail) {
     'background:rgba(60,10,10,0.92);color:#fca5a5;padding:6px 10px;border-radius:6px;' +
     'z-index:9999;font-size:10px;max-width:320px;width:180px;min-height:60px;' +
     'white-space:pre-wrap;pointer-events:none;letter-spacing:0.3px;line-height:1.15;' +
-    'writing-mode:vertical-rl;text-orientation:mixed;'; // вертикальная для ПК
+    'font-size:10px;font-family:sans-serif;'; // компактный в левом верхнем углу для ПК
   _errBox.textContent = title + (detail ? ': ' + detail : '');
   document.body.appendChild(_errBox);
   setTimeout(() => { if (_errBox) { _errBox.remove(); _errBox = null; } }, 10000);
