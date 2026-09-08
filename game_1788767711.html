@@ -801,7 +801,7 @@ const game = {
   hasScanner: false,
   audioOn: true,
   modal: null,
-  showShiftIntro: true,
+  showShiftIntro: false, // модалка отключена; true навсегда блокировала lock и клики (круговая блокировка)
   // raycasting
   raycaster: new THREE.Raycaster()
 };
@@ -1360,7 +1360,7 @@ function initThree() {
   );
   cup.position.set(0.3, 0.6, 0.9);
   lounge.add(cup);
-  lounge.position.set(0, 0, 15);
+  lounge.position.set(-6, 0, 15); // у стены, НЕ на центральном пути спавн→ресепшн (раньше блокировал игрока)
   game.scene.add(lounge);
 
   // === ВЕНДИНГОВЫЙ АВТОМАТ (магазин) ===
@@ -1669,8 +1669,8 @@ function initThree() {
     { x1: 19.8, z1: -20, x2: 20.2, z2: 20 },   // восток
     // Стойка ресепшн
     { x1: -2, z1: -10.5, x2: 2, z2: -9.5 },
-    // Диван (зона отдыха)
-    { x1: -1.5, z1: 14.5, x2: 1.5, z2: 15.2 },
+    // Диван (зона отдыха) — у западной стены, рядом с новым местом lounge (-6, 15)
+    { x1: -7.5, z1: 14.5, x2: -4.5, z2: 15.2 },
     // Вендинговый автомат
     { x1: -12.8, z1: 4.5, x2: -11.2, z2: 5.5 },
     // Склад
@@ -1732,19 +1732,43 @@ function setupInput() {
   document.addEventListener('keyup', (e) => {
     game.keys[e.code] = false;
   });
+  // ЛКМ = лечить, ПКМ = отклонить. Работает и с pointer lock, и без него.
+  // Без lock: действует только на «чистый клик» (без драга), чтобы не конфликтовать
+  // с drag-обзором камеры. С lock — мгновенно на mousedown (как в FPS).
+  let pendingClick = null;
   document.addEventListener('mousedown', (e) => {
-    // ЛКМ = лечить, ПКМ = отклонить (только когда курсор захвачен и есть выбранный пациент)
-    if (game.controls && game.controls.isLocked && game.selectedPatient && !game.modal && !game.showShiftIntro) {
-      if (e.button === 0) { treatPatient(); return; }
-      if (e.button === 2) { rejectPatient(); return; }
+    const locked = game.controls && game.controls.isLocked;
+    if (game.selectedPatient && !game.modal && !game.showShiftIntro) {
+      if (e.button === 0 || e.button === 2) {
+        if (locked) {
+          if (e.button === 0) treatPatient(); else rejectPatient();
+          return;
+        }
+        // Отложенный клик — решим на mouseup (драг = обзор, клик = действие)
+        pendingClick = { button: e.button, x: e.clientX, y: e.clientY, t: Date.now() };
+        return;
+      }
     }
-    if (!game.controls.isLocked && !game.modal && !game.showShiftIntro) {
+    if (!locked && !game.modal && !game.showShiftIntro) {
       safeLock();
     }
   });
-  // Отключаем контекстное меню (ПКМ = отклонить)
+  document.addEventListener('mouseup', (e) => {
+    if (!pendingClick) return;
+    const pc = pendingClick;
+    pendingClick = null;
+    if (game.controls && game.controls.isLocked) return; // уже обработано на mousedown
+    const moved = Math.abs(e.clientX - pc.x) + Math.abs(e.clientY - pc.y);
+    const quick = (Date.now() - pc.t) < 450;
+    if (moved < 6 && quick && game.selectedPatient && !game.modal) {
+      if (pc.button === 0) treatPatient();
+      if (pc.button === 2) rejectPatient();
+    }
+  });
+  // Отключаем контекстное меню (ПКМ = отклонить) — но не на UI-элементах
   document.addEventListener('contextmenu', (e) => {
-    if (game.controls && game.controls.isLocked) e.preventDefault();
+    const onUI = !!(e.target && e.target.closest && e.target.closest('button, .modal, #hud button'));
+    if (!onUI) e.preventDefault();
   });
   game.controls.addEventListener('lock', () => {
     Audio.init();
@@ -1771,6 +1795,65 @@ function setupInput() {
       // Обработчик уже есть, но на всякий случай
     }
   });
+
+  // === DRAG-ОБЗОР ИЗ ЛЮБОЙ ТОЧКИ ЭКРАНА (мышь + тач) ===
+  // ВАЖНО: работает на ВСЕХ платформах (было внутри setupTouchUI — на десктопе
+  // не подключалось, и обзор мышью без pointer lock умирал).
+  const isUIEl = (el) => !!(el && el.closest && el.closest('button, #joystick, #lookStick, #hud'));
+  const isUIAt = (clientX, clientY) => isUIEl(document.elementFromPoint(clientX, clientY));
+  let dragLastX = 0, dragLastY = 0, dragActive = false;
+  const dragApply = (clientX, clientY) => {
+    if (!game.camera) return;
+    const dx = clientX - dragLastX;
+    const dy = clientY - dragLastY;
+    dragLastX = clientX;
+    dragLastY = clientY;
+    const sens = 0.004;
+    game.camera.rotation.y -= dx * sens;
+    game.camera.rotation.x -= dy * sens;
+    game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
+  };
+  // Touch (iOS Safari — t.target ненадёжен, проверяем elementFromPoint)
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 0) return;
+    const t = e.touches[0];
+    if (isUIAt(t.clientX, t.clientY)) return;
+    if (game.controls && game.controls.isLocked) return;
+    dragActive = true;
+    dragLastX = t.clientX;
+    dragLastY = t.clientY;
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!dragActive) return;
+    for (let i = 0; i < e.touches.length; i++) {
+      const t = e.touches[i];
+      if (!isUIAt(t.clientX, t.clientY)) {
+        e.preventDefault();
+        dragApply(t.clientX, t.clientY);
+        return;
+      }
+    }
+  }, { passive: false });
+  document.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0) dragActive = false;
+  });
+  // Мышь (десктоп): drag работает когда pointer lock НЕ активен.
+  // Если lock включился посреди drag'а — гасим drag, чтобы PLC и drag не крутили вдвое.
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    if (isUIEl(e.target)) return;
+    if (game.controls && game.controls.isLocked) return;
+    dragActive = true;
+    dragLastX = e.clientX;
+    dragLastY = e.clientY;
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!dragActive || e.pointerType !== 'mouse') return;
+    if (game.controls && game.controls.isLocked) { dragActive = false; return; }
+    dragApply(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerup', () => { dragActive = false; });
+  document.addEventListener('pointercancel', () => { dragActive = false; });
 
   // === СЕНСОРНОЕ УПРАВЛЕНИЕ (iPhone/iPad/Android) ===
   const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -2036,61 +2119,6 @@ function setupTouchUI() {
   lookStick.addEventListener('pointerup', (e) => { if (e.pointerId === game.lookJoystick.pointerId) resetLook(); });
   lookStick.addEventListener('pointercancel', (e) => { if (e.pointerId === game.lookJoystick.pointerId) resetLook(); });
 
-  // === DRAG-ОБЗОР ИЗ ЛЮБОЙ ТОЧКИ ЭКРАНА (стандарт: палец вверх = взгляд вверх) ===
-  // Свайп в любом свободном месте вращает камеру. Работает и на touch, и на mouse.
-  const isUIEl = (el) => !!(el && el.closest && el.closest('button, #joystick, #lookStick, #hud'));
-  const isUIAt = (clientX, clientY) => isUIEl(document.elementFromPoint(clientX, clientY));
-  let dragLastX = 0, dragLastY = 0, dragActive = false;
-  const dragApply = (clientX, clientY) => {
-    if (!game.camera) return;
-    const dx = clientX - dragLastX;
-    const dy = clientY - dragLastY;
-    dragLastX = clientX;
-    dragLastY = clientY;
-    const sens = 0.004;
-    game.camera.rotation.y -= dx * sens;
-    game.camera.rotation.x -= dy * sens;
-    game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
-  };
-  // Touch events (iOS Safari)
-  document.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 0) return;
-    const t = e.touches[0];
-    if (isUIAt(t.clientX, t.clientY)) return;
-    if (game.hasPointerLock && game.controls && game.controls.isLocked) return;
-    dragActive = true;
-    dragLastX = t.clientX;
-    dragLastY = t.clientY;
-  }, { passive: true });
-  document.addEventListener('touchmove', (e) => {
-    if (!dragActive) return;
-    for (let i = 0; i < e.touches.length; i++) {
-      const t = e.touches[i];
-      if (!isUIAt(t.clientX, t.clientY)) {
-        e.preventDefault();
-        dragApply(t.clientX, t.clientY);
-        return;
-      }
-    }
-  }, { passive: false });
-  document.addEventListener('touchend', (e) => {
-    if (e.touches.length === 0) dragActive = false;
-  });
-  // Pointer events (desktop mouse)
-  document.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'mouse') return;
-    if (isUIEl(e.target)) return;
-    if (game.hasPointerLock && game.controls && game.controls.isLocked) return;
-    dragActive = true;
-    dragLastX = e.clientX;
-    dragLastY = e.clientY;
-  });
-  document.addEventListener('pointermove', (e) => {
-    if (!dragActive || e.pointerType !== 'mouse') return;
-    dragApply(e.clientX, e.clientY);
-  });
-  document.addEventListener('pointerup', () => { dragActive = false; });
-  document.addEventListener('pointercancel', () => { dragActive = false; });
 }
 
 function makeTouchButton(id, label, position, color) {
@@ -2367,9 +2395,6 @@ function renderHud() {
   html += '<div class="hud-pill warn">☕ <b>' + game.sanity + '</b>%</div>';
   html += '<div class="hud-pill ' + (game.deaths > 0 ? 'bad' : '') + '">☠ <b>' + game.deaths + '</b>/3</div>';
   html += '</div>';
-
-  // Crosshair
-  html += '<div class="crosshair"><div class="crosshair-ring"></div></div>';
 
   // Компас/направление к ближайшему пациенту
   if (game.camera && game.patients.length > 0) {
