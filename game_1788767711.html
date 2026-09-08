@@ -2880,6 +2880,13 @@ function update(dtArg) {
       }
     });
   }
+
+  // === Автоподбор пациента, когда близко (карточка автоматически) ===
+  if (!game.showShiftIntro && !game.selectedPatient && game.patients && game.camera) {
+    selectNearestPatient();
+  }
+  // Обновляем HUD — динамическое расстояние и карточка
+  renderHud();
 }
 
 function animate() {
