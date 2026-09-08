@@ -1,0 +1,14 @@
+{
+  "name": "animal-hospital-3d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dev-зависимости ТОЛЬКО для headless-тестов (Playwright). Сама игра — статический HTML без сборки; node_modules не коммитится (см. .gitignore).",
+  "scripts": {
+    "test": "node tests/smoke.mjs && node tests/touch-look.mjs",
+    "test:smoke": "node tests/smoke.mjs",
+    "test:touch-look": "node tests/touch-look.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

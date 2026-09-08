@@ -9,30 +9,11 @@
 //
 // Запуск (после python3 -m http.server 8091):
 //   node tests/touch-look.mjs
-// Локально без браузеров Playwright (системный Chrome):
-//   PLAYWRIGHT_CHROME_PATH='/Applications/Google Chrome.app/...' node tests/touch-look.mjs
+// Браузер ищется сам: PLAYWRIGHT_CHROME_PATH → системный Chrome → браузер
+// Playwright из CI. Пакет playwright-core ставится в репо через `npm i`.
 
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-function loadPlaywright() {
-  const candidates = [
-    process.env.PLAYWRIGHT_PATH,
-    'playwright',
-    'playwright-core',
-    '/opt/node22/lib/node_modules/playwright'
-  ].filter(Boolean);
-  for (const c of candidates) {
-    try { return require(c); } catch { /* пробуем следующий */ }
-  }
-  console.error('❌ Не найден пакет playwright. Установи: npm i -D playwright');
-  process.exit(1);
-}
-const { chromium } = loadPlaywright();
-const launchOpts = process.env.PLAYWRIGHT_CHROME_PATH
-  ? { executablePath: process.env.PLAYWRIGHT_CHROME_PATH }
-  : {};
+import { launchBrowser } from './launch.mjs';
 
 const BASE = process.env.BASE_URL || 'http://localhost:8091';
 
@@ -45,7 +26,7 @@ if (!match) {
 const gameFile = match[1];
 console.log('▶ Тестируем:', gameFile);
 
-const browser = await chromium.launch(launchOpts);
+const browser = await launchBrowser();
 const ctx = await browser.newContext({ hasTouch: true, viewport: { width: 900, height: 700 } });
 const page = await ctx.newPage();
 const errors = [];

@@ -11,31 +11,7 @@
 // отработают все ветки состояний в update(). Любая ошибка страницы = провал.
 
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-
-// Playwright резолвим через require: в CI он ставится в node_modules,
-// локально может быть установлен глобально (тогда помогает PLAYWRIGHT_PATH).
-const require = createRequire(import.meta.url);
-function loadPlaywright() {
-  const candidates = [
-    process.env.PLAYWRIGHT_PATH,
-    'playwright',
-    'playwright-core',
-    '/opt/node22/lib/node_modules/playwright'
-  ].filter(Boolean);
-  for (const c of candidates) {
-    try { return require(c); } catch { /* пробуем следующий */ }
-  }
-  console.error('❌ Не найден пакет playwright. Установи: npm i -D playwright');
-  process.exit(1);
-}
-const { chromium } = loadPlaywright();
-// PLAYWRIGHT_CHROME_PATH — путь к системному Chrome/Chromium, если браузеры
-// Playwright не установлены (playwright-core всегда требует executablePath).
-// В CI переменная не задана — используется дефолтный браузер Playwright.
-const launchOpts = process.env.PLAYWRIGHT_CHROME_PATH
-  ? { executablePath: process.env.PLAYWRIGHT_CHROME_PATH }
-  : {};
+import { launchBrowser } from './launch.mjs';
 
 const BASE = process.env.BASE_URL || 'http://localhost:8091';
 
@@ -49,7 +25,7 @@ if (!match) {
 const gameFile = match[1];
 console.log('▶ Тестируем:', gameFile);
 
-const browser = await chromium.launch(launchOpts);
+const browser = await launchBrowser();
 const page = await browser.newPage();
 
 const errors = [];

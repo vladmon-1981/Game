@@ -71,9 +71,11 @@ git fetch origin && git status --short && git log --oneline --left-right --graph
 ## Smoke-тест (обязательно прогонять перед пушем)
 
 ```bash
-cd /home/user/Game
 python3 -m http.server 8091 &
+npm i                # playwright-core в node_modules (не коммитится), один раз
 node tests/smoke.mjs
+node tests/touch-look.mjs   # регрессия крена/переворота камеры (тач-обзор)
+# или обе сразу: npm test
 ```
 
 Проверяет три вещи: (1) нет ошибок страницы/консоли, (2) игрок реально смещается при удержании клавиши, (3) пациент доходит до очереди у ресепшн. Пункты 2-3 важны отдельно от пункта 1: самый неприятный класс багов здесь — **тихий**, без единой ошибки в консоли (см. dt-баг в `DECISIONS.md`), и ловится только проверкой, что мир действительно движется.
@@ -85,15 +87,14 @@ node tests/smoke.mjs
 ## Как тестировать локально
 
 ```bash
-cd /home/user/Game
 python3 -m http.server 8091
 # открыть http://localhost:8091/game_1788767711.html (или актуальный из index.html)
 ```
 
-Headless-проверка без браузера пользователя — Playwright + Chromium уже установлены в окружении:
+Headless-тесты (`tests/launch.mjs`) сами находят браузер в таком порядке: `PLAYWRIGHT_CHROME_PATH` → известные пути системного Chrome/Chromium (macOS/Linux) → браузер Playwright из CI. Пакет `playwright-core` ставится в репо через `npm i` (`package.json` коммитится, `node_modules/` — в `.gitignore`). Свои headless-скрипты:
 ```js
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+import { launchBrowser } from './tests/launch.mjs';
+const browser = await launchBrowser();
 ```
 Слушай `page.on('pageerror', ...)` — это самый быстрый способ поймать `ReferenceError`/`TypeError` в game loop, которые визуально почти незаметны (см. выше про плашку).
 
