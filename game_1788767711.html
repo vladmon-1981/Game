@@ -2635,10 +2635,10 @@ function update(dtArg) {
   // Добавлено по просьбе пользователя: управление взглядом без мыши
   if (game.camera && game.keys) {
     const sensArrow = 1.8;
-    if (game.keys['ArrowLeft'])  { game.camera.rotation.y -= sensArrow * dt; }
-    if (game.keys['ArrowRight']) { game.camera.rotation.y += sensArrow * dt; }
-    if (game.keys['ArrowUp'])    { game.camera.rotation.x -= sensArrow * dt; }
-    if (game.keys['ArrowDown'])  { game.camera.rotation.x += sensArrow * dt; }
+    if (game.keys['ArrowLeft'])  { game.camera.rotation.y += sensArrow * dt; } // инвертировано
+    if (game.keys['ArrowRight']) { game.camera.rotation.y -= sensArrow * dt; } // инвертировано
+    if (game.keys['ArrowUp'])    { game.camera.rotation.x += sensArrow * dt; } // инвертировано
+    if (game.keys['ArrowDown'])  { game.camera.rotation.x -= sensArrow * dt; } // инвертировано
     game.camera.rotation.z = 0;
     game.camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, game.camera.rotation.x));
   }
@@ -2935,9 +2935,11 @@ function showRuntimeError(title, detail) {
   console.error('[AH]', title, detail || '');
   if (_errBox) _errBox.remove();
   _errBox = document.createElement('div');
-  _errBox.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);' +
-    'background:rgba(60,10,10,0.92);color:#fca5a5;padding:8px 14px;border-radius:10px;' +
-    'z-index:9999;font-size:12px;max-width:90vw;white-space:pre-wrap;pointer-events:none;';
+  _errBox.style.cssText = 'position:fixed;top:8px;left:8px;' +
+    'background:rgba(60,10,10,0.92);color:#fca5a5;padding:6px 10px;border-radius:6px;' +
+    'z-index:9999;font-size:10px;max-width:320px;width:180px;min-height:60px;' +
+    'white-space:pre-wrap;pointer-events:none;letter-spacing:0.3px;line-height:1.15;' +
+    'writing-mode:vertical-rl;text-orientation:mixed;'; // вертикальная для ПК
   _errBox.textContent = title + (detail ? ': ' + detail : '');
   document.body.appendChild(_errBox);
   setTimeout(() => { if (_errBox) { _errBox.remove(); _errBox = null; } }, 10000);
